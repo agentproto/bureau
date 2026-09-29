@@ -1,0 +1,73 @@
+{
+  "name": "bureau-sh",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bureau-sh/bureau.git"
+  },
+  "description": "Bureau: an installable browser capability server. Drives a real (stealth) browser and exposes its capabilities as MCP tools over HTTP.",
+  "main": "./dist/index.js",
+  "bin": {
+    "bureau": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./sdk": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.js",
+      "default": "./dist/sdk.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js",
+      "default": "./dist/plugin.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
+    },
+    "./serve": {
+      "types": "./dist/serve.d.ts",
+      "import": "./dist/serve.js",
+      "default": "./dist/serve.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@agentproto/browser-process": "^0.1.2",
+    "@agentproto/browser-profiles": "^0.0.0",
+    "@agentproto/bureau-core": "workspace:*",
+    "@agentproto/bureau-drivers": "workspace:*",
+    "@agentproto/bureau-mcp": "workspace:*",
+    "@agentproto/driver": "^0.2.4",
+    "@agentproto/workflow-runtime": "^0.14.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ws": "^8.20.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12"
+  }
+}

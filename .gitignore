@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+out/
+publish/
+sessions/
+# the lockfile is generated at publish time (G2); a local one records link: paths
+/pnpm-lock.yaml
+
+# local-only: link override to unpublished @agentproto packages, and the export machinery
+/.pnpmfile.cjs
+/local-links.json
+/export/*
+!/export/scan.sh
+!/export/scan-patterns.txt
+!/export/scan-selftest.sh

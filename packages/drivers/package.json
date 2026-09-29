@@ -1,0 +1,42 @@
+{
+  "name": "@agentproto/bureau-drivers",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bureau-sh/bureau.git"
+  },
+  "description": "Concrete BrowserDriver backends for Bureau: camofox (stealth Firefox) and an external MCP browser server",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./camofox": {
+      "types": "./dist/camofox/index.d.ts",
+      "import": "./dist/camofox/index.js",
+      "default": "./dist/camofox/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js",
+      "default": "./dist/mcp/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentproto/bureau-core": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

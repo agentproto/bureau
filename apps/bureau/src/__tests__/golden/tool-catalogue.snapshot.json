@@ -1,0 +1,508 @@
+{
+  "_about": "Core-only tool catalogue: name, input schema and description hash for every tool `bureau serve` registers with no plugin loaded.",
+  "recordedAt": "2026-09-29",
+  "source": "core catalogue",
+  "toolCount": 17,
+  "health": {
+    "request": "GET /health",
+    "response": {
+      "ok": true,
+      "tools": 17
+    },
+    "shape": {
+      "ok": "boolean",
+      "tools": "number"
+    }
+  },
+  "tools": [
+    {
+      "name": "browser_navigate",
+      "descriptionSha256": "7bc677141af1489a6b6d3ec649456e0b1b2b09e2bff151306dacada1153f5b64",
+      "descriptionLength": 75,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "waitUntil": {
+            "default": "load",
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "session": {
+            "type": "string",
+            "description": "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "browser_evaluate",
+      "descriptionSha256": "effbf98ba61ed3af4405debcd49534c8a7cbb434aa33ad5ef89d6a9160ff6ab6",
+      "descriptionLength": 66,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string"
+          },
+          "awaitPromise": {
+            "default": true,
+            "type": "boolean"
+          },
+          "returnByValue": {
+            "default": true,
+            "type": "boolean"
+          },
+          "maxResultBytes": {
+            "default": 64000,
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "session": {
+            "type": "string",
+            "description": "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
+          }
+        },
+        "required": [
+          "expression"
+        ]
+      }
+    },
+    {
+      "name": "browser_click",
+      "descriptionSha256": "14989a12b65427284e98d15452b327f4924e96b590cc4f624cf0e89351cc3835",
+      "descriptionLength": 33,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "button": {
+            "default": "left",
+            "type": "string",
+            "enum": [
+              "left",
+              "middle",
+              "right"
+            ]
+          },
+          "clickCount": {
+            "default": 1,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "trusted": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "browser_fill",
+      "descriptionSha256": "7fe7b72801fe11a3f3d3af60443a46e0fd63b459360602b0ef76e66cab0dd2b4",
+      "descriptionLength": 38,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "clear": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "selector",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "browser_screenshot",
+      "descriptionSha256": "0924c188013ec74a0e8edb2d0a4bc4911be1c4a26b1067a5459b4de8cb305ac7",
+      "descriptionLength": 615,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "format": {
+            "default": "png",
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg",
+              "webp"
+            ]
+          },
+          "quality": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "fullPage": {
+            "default": false,
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string",
+            "description": "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_get_dom",
+      "descriptionSha256": "2e868139e85e23a60619d31d1a96acfeb56a4a40a20adee0d753edf204d5392f",
+      "descriptionLength": 217,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "path": {
+            "description": "Write the serialized HTML to a file instead of returning it inline (a relative path lands in the artifacts dir). Preferred for large pages so the bytes don't bloat the response.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_list_requests",
+      "descriptionSha256": "93276af959d71259871d75f4a41614f237657c3418331248cbcd5efdede80bd9",
+      "descriptionLength": 66,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "number"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 500
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_get_request_body",
+      "descriptionSha256": "a97fe7b2caae7358245ce997054dc7ea1a5037cdd782205c839ec42a13c04bee",
+      "descriptionLength": 79,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId"
+        ]
+      }
+    },
+    {
+      "name": "browser_cdp_send",
+      "descriptionSha256": "a8373bc50cb2a2180b6be4544df444e010ff30bf15cdb491a757aa1e95eec0f6",
+      "descriptionLength": 93,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "params": {}
+        },
+        "required": [
+          "method"
+        ]
+      }
+    },
+    {
+      "name": "scrape",
+      "descriptionSha256": "46df8fee9ef152b23d84f43645e6fb869cfbd1bf3f3c81053e0e7831df2e6db5",
+      "descriptionLength": 529,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Absolute URL to load."
+          },
+          "session": {
+            "description": "Saved session id to drive (logged-in identity). Omit for anonymous.",
+            "type": "string"
+          },
+          "waitUntil": {
+            "description": "Navigation completion signal (default load).",
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle"
+            ]
+          },
+          "maxBytes": {
+            "description": "Cap on returned text bytes (default 200000).",
+            "type": "number"
+          },
+          "images": {
+            "description": "Also extract the og:image + profile-displayphoto srcs (the display photo the text read strips). Returns `image` (best URL) + `images`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "browser_act",
+      "descriptionSha256": "f211d38d26a4120922ddfd7e66179c24df2463d80ea7770316b95693e01c8c61",
+      "descriptionLength": 574,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "Saved logged-in identity to act AS (e.g. x-agentik)."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "goto",
+              "click",
+              "fill",
+              "press",
+              "scroll",
+              "read",
+              "screenshot",
+              "evaluate"
+            ],
+            "description": "What to do this call."
+          },
+          "url": {
+            "description": "Absolute URL (action goto).",
+            "type": "string"
+          },
+          "expression": {
+            "description": "JS expression evaluated in the page; returns its value (action evaluate). Use to find selectors / read state on JS-heavy pages.",
+            "type": "string"
+          },
+          "selector": {
+            "description": "CSS selector (action click/fill).",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text to type (action fill).",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key to press, e.g. \"Enter\" (action press).",
+            "type": "string"
+          },
+          "times": {
+            "description": "Scroll bursts (action scroll, default 3).",
+            "type": "number"
+          },
+          "maxBytes": {
+            "description": "Cap on returned text bytes (action read, default 200000).",
+            "type": "number"
+          }
+        },
+        "required": [
+          "session",
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "browser_download",
+      "descriptionSha256": "3119647c9f39f056ce4973778a0aa192cd05dc718981bf1cde740bfee0841f08",
+      "descriptionLength": 475,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Saved logged-in identity whose pooled tab drives the download."
+          },
+          "url": {
+            "description": "Absolute http(s) URL to navigate to — a download-triggering link (e.g. a PDF with Content-Disposition: attachment). Mutually usable with `selector`; at least one is required.",
+            "type": "string"
+          },
+          "selector": {
+            "description": "CSS selector of an element to click that triggers a download, instead of navigating to `url`.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Max wait for the download to land, 1000-120000 (default 30000).",
+            "type": "number"
+          }
+        },
+        "required": [
+          "session"
+        ]
+      }
+    },
+    {
+      "name": "bureau_workflow_list",
+      "descriptionSha256": "ced275573c115f05e0e7dbddf5b992cc87ebd09791a486dde32fb9fec7aaab9a",
+      "descriptionLength": 312,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "bureau_workflow_run",
+      "descriptionSha256": "8991f089062a55dc2cd229a1f4f0c0ae6334529fa5fa8818a47e46a97601bcc5",
+      "descriptionLength": 639,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Workflow id from bureau_workflow_list."
+          },
+          "inputs": {
+            "description": "Data inputs keyed by the workflow's input flags.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "session": {
+            "description": "Saved session id to drive (logged-in identity).",
+            "type": "string"
+          },
+          "liveUrl": {
+            "description": "Open an anonymous live camofox tab at this URL.",
+            "type": "string"
+          },
+          "offline": {
+            "description": "Canned payload to replay (no browser/network): the workflow's seed shape, or `true` to replay its built-in seed."
+          },
+          "heal": {
+            "description": "Pass false to skip the session self-heal pre-flight (default: on). Only applies to saved `session` runs; offline/liveUrl are unaffected.",
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "confirmPaid": {
+            "description": "Set true to approve the per-run charge on a PRICED workflow. Required for a priced run (the MCP surface can't prompt); free workflows ignore it.",
+            "type": [
+              "boolean",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "bureau_sessions",
+      "descriptionSha256": "1f16fb3215513865d5d37af2327875b15717a8799789520ee89e18e27cc1c428",
+      "descriptionLength": 668,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "verify": {
+            "description": "Run a live auth probe per session and stamp authStatus before returning (default false; reads persisted status otherwise).",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "bureau_tabs",
+      "descriptionSha256": "ba965a278f2a997cd21da0bb700ac3f72b46d5b50f8c523a766735042ab93f54",
+      "descriptionLength": 285,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "session": {
+            "description": "Saved session id to scope to; omit to list all.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "session_sync_from_chrome",
+      "descriptionSha256": "3f53dcb24428b4ff69c1ac3be15921758b17474252f073a60238c927db46a6aa",
+      "descriptionLength": 429,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "Saved session id to refresh (a chrome-sourced session)."
+          },
+          "profile": {
+            "description": "Re-pin to this Chrome profile dir (\"Default\", \"Profile 1\") when it differs from the current pin; omit to refresh the pinned profile.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ]
+      }
+    }
+  ]
+}

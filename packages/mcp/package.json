@@ -1,0 +1,35 @@
+{
+  "name": "@agentproto/bureau-mcp",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bureau-sh/bureau.git"
+  },
+  "description": "Unified browser MCP catalogue for Bureau: control, scrape, screencast and inspect tools",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentproto/bureau-core": "workspace:*",
+    "@agentproto/bureau-drivers": "workspace:*",
+    "@agentproto/bureau-purify": "workspace:*",
+    "@agentproto/bureau-router": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

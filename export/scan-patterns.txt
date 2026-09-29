@@ -1,0 +1,23 @@
+# label<TAB>flags<TAB>extended-regex   (flags: i = case-insensitive, - = none)
+# Content patterns for scan.sh. A finding prints file:line:label only, never the matched text.
+personal-email	i	[A-Za-z0-9._%+-]+@(gmail|googlemail|hotmail|yahoo|outlook|icloud|proton|protonmail)\.[a-z]+
+agentik-net	i	agentik\.net
+abs-users-path	-	/Users/
+abs-volumes-path	-	/Volumes/
+author-name	i	jeremy
+token-sk	-	\bsk-[A-Za-z0-9_-]{6,}
+token-aws	-	AKIA[0-9A-Z]{4,}
+token-gld	-	\bgld_[A-Za-z0-9]
+token-oat	-	\boat_[A-Za-z0-9]
+token-gdt	-	\bgdt_[A-Za-z0-9]
+token-github	-	\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{8,}
+bearer-literal	-	Bearer [A-Za-z0-9._~+/-]{16,}
+private-key	-	-----BEGIN [A-Z ]*PRIVATE KEY-----
+cloud-run-url	i	run\.app
+internal-host	i	\.internal\b
+private-ip	-	\b(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)\b
+tailnet-host	i	\.ts\.net\b
+product-guilde	i	guilde
+product-simone	i	simone
+product-canvakit	i	canvakit
+product-other	i	(katchy|pygmalion|agentpush|talkist|agstudio)
