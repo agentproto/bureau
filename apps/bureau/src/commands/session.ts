@@ -57,11 +57,25 @@ import {
   isSiteLoginWallUrl,
 } from "../lib/session-persist.js"
 
+import {
+  cmdGrants,
+  cmdImport,
+  cmdRevoke,
+  type SessionConsentDeps,
+} from "./session-consent.js"
+
 const USAGE = `bureau session — manage saved browser identities
 
   bureau session scan                       Chrome profiles as named identities
   bureau session accounts <profile> [--platform x]   sub-accounts within a profile
-  bureau session list                       saved sessions
+  bureau session list                       saved sessions, then the consent grants (domains, granted-at, device)
+  bureau session import --from chrome --domains a.com,b.com [--yes] [--profile P] [--session ID] [--device FP]
+                                            grant Bureau the cookies of NAMED domains from a Chrome profile.
+                                              Without --yes it asks per domain; non-interactive runs need
+                                              --domains and --yes. Wildcards and "all" are refused.
+                                              --full-profile --yes grants the whole profile (local only)
+  bureau session grants [--all]             consent grants only (--all includes revoked and expired)
+  bureau session revoke <domain|grant-id>   revoke a grant: deletes the derived cookies and records it in the ledger
   bureau session show <id> [--verify]       a saved session + login status
                                             (heuristic: cookie name + expiry, no network — can't
                                               tell a stale-but-unexpired cookie VALUE from a live one)
@@ -665,7 +679,10 @@ async function cmdRm(id: string | undefined): Promise<number> {
 }
 
 /** Dispatch a `bureau session …` invocation. Returns a process exit code. */
-export async function runSession(argv: string[]): Promise<number> {
+export async function runSession(
+  argv: string[],
+  consentDeps: SessionConsentDeps = {}
+): Promise<number> {
   const { positionals, flags } = parseArgs(argv)
   const [sub, arg] = positionals
   switch (sub) {
@@ -676,7 +693,14 @@ export async function runSession(argv: string[]): Promise<number> {
       return cmdAccounts(arg, flags)
     case "list":
       await cmdList()
-      return 0
+      out("")
+      return cmdGrants(flags, consentDeps)
+    case "import":
+      return cmdImport(flags, consentDeps)
+    case "grants":
+      return cmdGrants(flags, consentDeps)
+    case "revoke":
+      return cmdRevoke(arg, consentDeps)
     case "show":
       return cmdShow(arg, flags)
     case "save":

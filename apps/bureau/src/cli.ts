@@ -3,7 +3,9 @@
  * composition root that bundles plugins (a plugin package).
  *
  *   bureau [serve]         start the capability server (MCP over HTTP)
- *   bureau start …         orchestrate Camofox + bureau serve in one shot
+ *   bureau start …         launch a browser + bureau serve in one shot
+ *   bureau stop            stop what bureau start began
+ *   bureau doctor          check the browser, Chrome access and Bureau's stores
  *   bureau session …       manage saved browser identities (scan/save/list/show/rm)
  *   bureau pair | devices | install-mcp   AIP-59 pairing (the only auth)
  *   bureau <plugin cmd> …  any subcommand a loaded plugin registers
@@ -51,8 +53,10 @@ export function loadWorkspaceEnv(metaUrl: string): void {
 const CORE_USAGE = `bureau — the browser stack's installable surface
 
   bureau [serve]         start the capability server (MCP over HTTP)
-  bureau start …         orchestrate Camofox + bureau serve in one shot
-  bureau session …       manage saved browser identities (scan/save/list/show/rm)
+  bureau start …         launch a browser (--browser camofox|chrome|chromium|<id>) and serve
+  bureau stop            stop the Bureau (and browser) that bureau start began
+  bureau doctor          check the browser, Chrome access and Bureau's stores (--json)
+  bureau session …       saved identities and consent grants (scan/save/list/show/rm/import/revoke)
   bureau pair            pair a remote device (QR + URL over the E2E rendezvous)
   bureau devices …       list | revoke <fingerprint|name> paired devices
   bureau install-mcp     pair a local MCP host (Claude Code, Cursor) and write its config
@@ -94,6 +98,16 @@ async function dispatch(argv: string[], opts: CliOptions): Promise<void> {
     case "start": {
       const { runStart } = await import("./commands/start.js")
       process.exitCode = await runStart(rest, bundled)
+      return
+    }
+    case "stop": {
+      const { runStop } = await import("./commands/stop.js")
+      process.exitCode = await runStop(rest)
+      return
+    }
+    case "doctor": {
+      const { runDoctorCommand } = await import("./commands/doctor.js")
+      process.exitCode = await runDoctorCommand(rest, bundled)
       return
     }
     case "pair": {

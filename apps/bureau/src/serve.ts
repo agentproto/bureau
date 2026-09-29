@@ -25,12 +25,9 @@
  *   sync       — session_sync_from_chrome
  */
 
-import { createBrowserDriverRegistry } from "@agentproto/bureau-drivers"
-import {
-  createCamofoxRestClient,
-  registerCamofoxDriver,
-} from "@agentproto/bureau-drivers/camofox"
 import { createBrowserMcpCatalogue } from "@agentproto/bureau-mcp"
+import type { BrowserCapabilityName, BrowserProvider, BrowserRegistry } from "@agentproto/driver-browser"
+import type { AddressInfo } from "node:net"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { asContent, toInputSchema, type McpEntry } from "./mcp-tool.js"
 import {
@@ -62,6 +59,29 @@ import {
   localChromePort,
 } from "@agentproto/browser-profiles"
 import { join } from "node:path"
+import {
+  DEFAULT_BROWSER_ID,
+  createBureauBrowserRegistry,
+  createCamofoxClient,
+  createControlDriverRegistry,
+  requireBrowser,
+  type BureauCamofoxClient,
+} from "./lib/browser-registry.js"
+import { gateEntriesByCapability } from "./lib/capability-gate.js"
+import {
+  browserFlagsFrom,
+  chooseBrowserId,
+  planBrowserLaunch,
+  type BrowserFlags,
+} from "./lib/browser-launch.js"
+import {
+  createBrowserRuntime,
+  unmanagedStatus,
+  isFatalLaunchError,
+  type BrowserRuntime,
+  type BrowserRuntimeOptions,
+} from "./lib/browser-runtime.js"
+import { removeRunState, writeRunState, type RunState } from "./lib/run-state.js"
 import { recipeRegistry } from "./lib/recipe-registry.js"
 import { setWorkflowHooks } from "./lib/workflow-hooks.js"
 import { registerSampleRecipes } from "./recipes/index.js"
@@ -93,12 +113,20 @@ export interface BureauCatalogue {
   /** Plugin HTTP routes, tried before MCP (undefined when no plugin has any). */
   extraRoutes?: (req: IncomingMessage, res: ServerResponse) => boolean
   store: ReturnType<typeof sessionStore>
-  camofox: ReturnType<typeof createCamofoxRestClient>
+  camofox: BureauCamofoxClient
+  /** Every registered browser: the built-ins plus each plugin's. */
+  browsers: BrowserRegistry
+  /** The active browser whose capabilities gate the tools. */
+  browser: BrowserProvider
 }
 
 export interface CatalogueOptions {
   plugins?: readonly BureauPlugin[]
   usage?: UsageMeter
+  /** Kit registry to resolve the browser from (default: built-ins plus the plugins' providers). */
+  browsers?: BrowserRegistry
+  /** The active browser (default: camofox). Tools it lacks the capability for answer with a typed error. */
+  browser?: BrowserProvider
 }
 
 /** Build the full tool catalogue — every entry `runServe` registers, minus
@@ -115,13 +143,10 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
   registerSampleRecipes(recipeRegistry)
 
   // ── Driver registry ────────────────────────────────────────────────────────
-  const registry = createBrowserDriverRegistry()
-  const camofox = createCamofoxRestClient({
-    baseUrl: process.env.CAMOFOX_URL,
-    userId: CONTROL_USER_ID,
-    apiKey: process.env.CAMOFOX_API_KEY,
-  })
-  registerCamofoxDriver(registry, { client: camofox })
+  const browsers = opts.browsers ?? createBureauBrowserRegistry({ plugins })
+  const browser = opts.browser ?? requireBrowser(browsers, DEFAULT_BROWSER_ID)
+  const camofox = createCamofoxClient(CONTROL_USER_ID)
+  const registry = createControlDriverRegistry(camofox)
 
   // ── Control catalogue ──────────────────────────────────────────────────────
   // Raw BrowserMcpToolDescriptor[] from the vendor-neutral catalogue; also kept
@@ -234,7 +259,11 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
           routes.some(route => route(req, res))
       : undefined
 
-  return { entries, extraRoutes, store, camofox }
+  const toolCapabilities: Record<string, BrowserCapabilityName> = {}
+  for (const plugin of plugins) Object.assign(toolCapabilities, plugin.toolCapabilities)
+  const gated = gateEntriesByCapability(entries, { active: browser, registry: browsers, extra: toolCapabilities })
+
+  return { entries: gated, extraRoutes, store, camofox, browsers, browser }
 }
 
 /** Parse `--host <h>` (else `$BUREAU_HOST`, else `127.0.0.1`) — the default
@@ -245,58 +274,126 @@ export function resolveHost(argv: string[] = []): string {
   return flags.host || process.env.BUREAU_HOST || "127.0.0.1"
 }
 
+
+/** Test and embedding seams for {@link runServe}. Every field is optional. */
+export interface ServeDeps {
+  /** Kit registry (default: built-ins plus the plugins' providers). Tests inject providers built over fakes. */
+  registry?: BrowserRegistry
+  /** Bureau state dir (default `bureauHome()`). */
+  home?: string
+  log?: (line: string) => void
+  /** Environment for flag defaults (default `process.env`). */
+  env?: NodeJS.ProcessEnv
+  /** Register SIGINT/SIGTERM and the unhandled-error safety net. Default true; tests turn it off. */
+  installProcessHandlers?: boolean
+  /** Supervisor tuning (clock, retry delay, crash-loop window, launch budget). */
+  runtime?: Pick<BrowserRuntimeOptions, "clock" | "healthIntervalMs" | "crashLoop" | "launchBudgetMs">
+  /** Called when the browser launch fails in a way retrying cannot fix. Default: exit code 1. */
+  onFatal?: (error: Error) => void
+}
+
+export interface ServeHandle {
+  readonly port: number
+  readonly host: string
+  /** The supervised browser; undefined under `--no-browser`. */
+  readonly runtime: BrowserRuntime | undefined
+  /** Settles when the first browser launch attempt is over. Never rejects. */
+  readonly browserReady: Promise<void>
+  /** Stop the browser Bureau started, drop the state file and close the server. */
+  close(): Promise<void>
+}
+
 /** Boot the capability server: load plugins, build the catalogue, listen for
- *  MCP over HTTP. `argv` is the bureau-serve-specific arg tail (e.g.
+ *  MCP over HTTP, and supervise the selected browser (`--browser`, default
+ *  camofox). `argv` is the bureau-serve-specific arg tail (e.g.
  *  `["--host", "0.0.0.0", "--plugin", "./x.js"]`); `extraPlugins` are
  *  already-constructed plugins a composition root (the studio entrypoint) adds.
- *  Rejects, before any port is opened, when a plugin fails to load. */
+ *  Rejects, before any port is opened, when a plugin fails to load or a browser
+ *  flag is invalid. The browser launches after the port is open, so `/health`
+ *  answers `starting` first. */
 export async function runServe(
   argv: string[] = [],
-  extraPlugins: readonly BureauPlugin[] = []
-): Promise<void> {
-  // ── Process safety net ─────────────────────────────────────────────────────
-  // The MCP SDK's per-request Server.close() can emit unhandled rejections
-  // (e.g. trying to send on a transport that's already closed). Without these
-  // handlers Node kills the daemon -> the 502/fetch-failed an operator sees
-  // (salvage: refs/salvage/stash/2026-07-07-33, crash safety net). Registered
-  // FIRST, before any startup work below, so a throw during catalogue
-  // construction is still logged rather than silently dropped by a bare
-  // top-level throw.
-  process.on("unhandledRejection", err => {
-    // eslint-disable-next-line no-console
-    console.error("[bureau] unhandledRejection:", err)
-  })
-  process.on("uncaughtException", err => {
-    // eslint-disable-next-line no-console
-    console.error("[bureau] uncaughtException:", err)
-  })
+  extraPlugins: readonly BureauPlugin[] = [],
+  deps: ServeDeps = {}
+): Promise<ServeHandle> {
+  const env = deps.env ?? process.env
+  if (deps.installProcessHandlers !== false) {
+    // The MCP SDK's per-request Server.close() can emit unhandled rejections
+    // (e.g. trying to send on a transport that's already closed). Without these
+    // handlers Node kills the daemon -> the 502/fetch-failed an operator sees
+    // (salvage: refs/salvage/stash/2026-07-07-33, crash safety net). Registered
+    // FIRST, before any startup work below, so a throw during catalogue
+    // construction is still logged rather than silently dropped.
+    process.on("unhandledRejection", err => {
+      // eslint-disable-next-line no-console
+      console.error("[bureau] unhandledRejection:", err)
+    })
+    process.on("uncaughtException", err => {
+      // eslint-disable-next-line no-console
+      console.error("[bureau] uncaughtException:", err)
+    })
+  }
 
   for (const plugin of extraPlugins) await checkLicense(plugin)
   const plugins = [
     ...extraPlugins,
     ...(await loadPlugins(pluginSpecs(argv))),
   ]
-  const catalogue = buildCatalogue({ plugins })
-  const { extraRoutes, store, camofox } = catalogue
 
-  const host = resolveHost(argv)
-  const port = Number(process.env.PORT ?? process.env.BUREAU_PORT ?? 8830)
+  const { flags } = parseArgs(argv)
+  const managed = flags["no-browser"] !== "true"
+  const browserFlags: BrowserFlags = browserFlagsFrom(flags)
+  const registry = deps.registry ?? createBureauBrowserRegistry({ plugins })
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   // Pairing (AIP-59) is the only auth in the OSS flavour. A loaded plugin (the
   // studio flavour) may supply its own `authorize` instead; then no pairing
-  // registry runs and there is no device to key grants on.
+  // registry runs, no consent host exists and there is no device to key grants on.
   const custom = plugins.filter(p => p.authorize)
   if (custom.length > 1)
     throw new PluginLoadError(
       custom.map(p => p.name).join(", "),
       "more than one plugin supplies `authorize`"
     )
-  const log = (line: string): void => {
+  const log = deps.log ?? ((line: string): void => {
     // eslint-disable-next-line no-console
     console.log(line)
-  }
-  const home = bureauHome()
+  })
+
+  // The consent host is built after the catalogue (it needs the session store),
+  // but `--full-profile` is resolved before it, so the proof looks it up lazily.
+  let consent: ReturnType<typeof createConsentHost> | undefined
+  const hasConsent = custom[0]?.authorize === undefined
+  const plan = planBrowserLaunch({
+    registry,
+    id: chooseBrowserId(browserFlags, env),
+    flags: browserFlags,
+    env,
+    ...(hasConsent
+      ? {
+          fullProfileProof: grantId => ({
+            grantId,
+            isActive: () => {
+              try {
+                return consent?.fullProfileProof({ grantId }).isActive() ?? false
+              } catch {
+                return false
+              }
+            },
+          }),
+        }
+      : {}),
+  })
+  if (plan.provider.id === DEFAULT_BROWSER_ID && plan.options.baseUrl !== undefined)
+    env["CAMOFOX_URL"] = plan.options.baseUrl
+
+  const catalogue = buildCatalogue({ plugins, browsers: registry, browser: plan.provider })
+  const { extraRoutes, store, camofox } = catalogue
+
+  const host = resolveHost(argv)
+  const port = Number(flags["port"] ?? env["PORT"] ?? env["BUREAU_PORT"] ?? 8830)
+  const home = deps.home ?? bureauHome(env)
+
   let pairing: BureauPairing | undefined
   let authorize: Authorize
   let entries = catalogue.entries
@@ -305,7 +402,7 @@ export async function runServe(
   } else {
     pairing = createBureauPairing({ home, port, log: line => log(`[pairing] ${line}`) })
     authorize = pairing.authorize
-    const consent = createConsentHost({
+    consent = createConsentHost({
       grants: fileGrantStore(join(home, "grants.json")),
       ledger: createConsentLedger({ path: join(home, "consent-ledger.jsonl") }),
       store,
@@ -313,7 +410,18 @@ export async function runServe(
       chrome: localChromePort({ chromeRoot: chromeUserDataRoot() }),
     })
     entries = gateEntriesByDevice(entries, consent)
+    if (browserFlags.fullProfile !== undefined) consent.fullProfileProof({ grantId: browserFlags.fullProfile })
   }
+
+  const startedAt = new Date()
+  const runtime = managed
+    ? createBrowserRuntime({
+        provider: plan.provider,
+        launchOptions: plan.options,
+        log: line => log(`[browser] ${line}`),
+        ...deps.runtime,
+      })
+    : undefined
 
   // ── HTTP server ────────────────────────────────────────────────────────────
   const httpServer = createBureauHttpServer({
@@ -322,6 +430,7 @@ export async function runServe(
     authorize,
     rateLimitDisabled: boolEnv("BUREAU_RATELIMIT_DISABLED"),
     port,
+    healthExtras: () => ({ ...(runtime ? runtime.status() : unmanagedStatus(plan.provider.id, startedAt)) }),
   })
 
   // Live watch: WebSocket upgrade on the same port (camofox screenshot-poll).
@@ -337,40 +446,91 @@ export async function runServe(
       }
       return null
     },
-    screenshotsFor: userId =>
-      createCamofoxRestClient({
-        baseUrl: process.env.CAMOFOX_URL,
-        userId,
-        apiKey: process.env.CAMOFOX_API_KEY,
-      }),
+    screenshotsFor: userId => createCamofoxClient(userId),
   })
 
   let control: ControlServer | undefined
-  const stopPairing = async (): Promise<void> => {
-    await control?.close().catch(() => {})
-    await pairing?.registry.shutdown().catch(() => {})
-  }
-  httpServer.on("close", () => void stopPairing())
-  for (const sig of ["SIGINT", "SIGTERM"] as const)
-    process.once(sig, () => void stopPairing().finally(() => process.exit(0)))
-
-  httpServer.listen(port, host, () => {
-    if (pairing) {
-      const active = pairing
-      void (async (): Promise<void> => {
-        try {
-          control = await startControlServer(home, active.registry, log)
-        } catch (e) {
-          log(`[pairing] no control socket: ${e instanceof Error ? e.message : String(e)}`)
-        }
-        await active.registry.startAutoconnect().catch(e => {
-          log(`[pairing] autoconnect failed: ${e instanceof Error ? e.message : String(e)}`)
-        })
-      })()
-    }
-    // eslint-disable-next-line no-console
-    console.log(
-      `bureau capability server on ${host}:${port} — ${entries.length} tools${plugins.length ? ` (plugins: ${plugins.map(p => p.name).join(", ")})` : ""} (MCP POST /mcp, health GET /health, watch WS /watch/:tab)`
-    )
+  let closing: Promise<void> | undefined
+  let boundPort = port
+  const state = (over: Partial<RunState> = {}): RunState => ({
+    version: 1,
+    pid: process.pid,
+    port: boundPort,
+    host,
+    browser: plan.provider.id,
+    browserOwned: false,
+    startedAt: startedAt.toISOString(),
+    ...over,
   })
+  const shutdown = (opts: { keepState?: boolean } = {}): Promise<void> => {
+    closing ??= (async (): Promise<void> => {
+      await runtime?.stop().catch(() => {})
+      await control?.close().catch(() => {})
+      await pairing?.registry.shutdown().catch(() => {})
+      // A fatal launch error stays in the state file so `bureau start --detach` can report it.
+      if (!opts.keepState) await removeRunState(home).catch(() => {})
+      await new Promise<void>(resolve => (httpServer.listening ? httpServer.close(() => resolve()) : resolve()))
+    })()
+    return closing
+  }
+  if (deps.installProcessHandlers !== false)
+    for (const sig of ["SIGINT", "SIGTERM"] as const)
+      process.once(sig, () => void shutdown().finally(() => process.exit(0)))
+
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once("error", reject)
+    httpServer.listen(port, host, () => {
+      httpServer.off("error", reject)
+      resolve()
+    })
+  })
+  boundPort = (httpServer.address() as AddressInfo).port
+
+  if (pairing) {
+    const active = pairing
+    void (async (): Promise<void> => {
+      try {
+        control = await startControlServer(home, active.registry, log)
+      } catch (e) {
+        log(`[pairing] no control socket: ${e instanceof Error ? e.message : String(e)}`)
+      }
+      await active.registry.startAutoconnect().catch(e => {
+        log(`[pairing] autoconnect failed: ${e instanceof Error ? e.message : String(e)}`)
+      })
+    })()
+  }
+  log(
+    `bureau capability server on ${host}:${boundPort} — ${entries.length} tools, browser ${plan.provider.id}${managed ? "" : " (not managed)"}${plugins.length ? ` (plugins: ${plugins.map(p => p.name).join(", ")})` : ""} (MCP POST /mcp, health GET /health, watch WS /watch/:tab)`
+  )
+  await writeRunState(home, state()).catch(e => log(`[bureau] cannot write run state: ${e instanceof Error ? e.message : String(e)}`))
+
+  const browserReady = (async (): Promise<void> => {
+    if (!runtime) return
+    try {
+      const instance = await runtime.start()
+      await writeRunState(
+        home,
+        state({
+          browserOwned: !instance.wasAlreadyRunning,
+          browserInstanceId: instance.id,
+          ...(instance.pid !== undefined ? { browserPid: instance.pid } : {}),
+        })
+      ).catch(() => {})
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e))
+      if (isFatalLaunchError(e)) {
+        log(`[browser] ${error.message}`)
+        await writeRunState(home, state({ error: error.message })).catch(() => {})
+        await shutdown({ keepState: true })
+        if (deps.onFatal) deps.onFatal(error)
+        else process.exitCode = 1
+        return
+      }
+      // Not fatal: Bureau keeps answering and /health carries the backend's state.
+      log(`[browser] ${error.message}`)
+      await writeRunState(home, state({ error: error.message })).catch(() => {})
+    }
+  })()
+
+  return { port: boundPort, host, runtime, browserReady, close: shutdown }
 }

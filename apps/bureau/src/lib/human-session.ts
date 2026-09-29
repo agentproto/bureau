@@ -5,7 +5,7 @@ import {
   type CamofoxSession,
   type OpenSessionOptions,
 } from "@agentproto/browser-profiles"
-import { BLOCKED_PAGE_EXPRESSION } from "@agentproto/bureau-drivers/camofox"
+import { BLOCKED_PAGE_EXPRESSION } from "./browser-registry.js"
 import type { HumanSession } from "@agentproto/bureau-core/page-eval"
 import { platformKit } from "./platform-kit.js"
 

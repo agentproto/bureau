@@ -15,6 +15,7 @@ import { isAbsolute, resolve as resolvePath } from "node:path"
 import { pathToFileURL } from "node:url"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { SessionStorePort } from "@agentproto/browser-profiles"
+import { BROWSER_CAPABILITY_NAMES, type BrowserCapabilityName, type BrowserProvider } from "@agentproto/driver-browser"
 import type { BrowserMcpToolDescriptor } from "@agentproto/bureau-mcp"
 import type { McpEntry } from "./mcp-tool.js"
 import type { Authorize } from "./lib/mcp-server.js"
@@ -87,6 +88,13 @@ export interface BureauPlugin {
   /** Replaces the OSS pairing authorize on `/mcp` (the studio flavour supplies
    *  `allowLoopback`). At most one loaded plugin may set it. */
   authorize?: Authorize
+  /** Browser providers (kit `defineBrowser`), registered next to camofox / chrome /
+   *  chromium and selectable by id: `bureau start --browser <id>`. */
+  browsers?: BrowserProvider[]
+  /** Tools of this plugin that need a browser capability (tool name to
+   *  capability). Merged into the capability gate table, so the tool returns a
+   *  typed `browser:unsupported` error on a browser that lacks it. */
+  toolCapabilities?: Record<string, BrowserCapabilityName>
 }
 
 export class PluginLoadError extends Error {
@@ -117,6 +125,21 @@ export function pluginShapeProblem(p: unknown): string | undefined {
       return "`commands` must be an object"
     for (const [c, fn] of Object.entries(o.commands))
       if (typeof fn !== "function") return `command "${c}" must be a function`
+  }
+  if (o.browsers !== undefined) {
+    if (!Array.isArray(o.browsers)) return "`browsers` must be an array"
+    for (const b of o.browsers as unknown[]) {
+      const r = b as Record<string, unknown> | null
+      if (!r || typeof r.id !== "string" || typeof r.launch !== "function")
+        return "each browser needs a string `id` and a `launch()` function"
+    }
+  }
+  if (o.toolCapabilities !== undefined) {
+    if (!o.toolCapabilities || typeof o.toolCapabilities !== "object" || Array.isArray(o.toolCapabilities))
+      return "`toolCapabilities` must be an object"
+    for (const [tool, cap] of Object.entries(o.toolCapabilities))
+      if (!(BROWSER_CAPABILITY_NAMES as readonly string[]).includes(cap as string))
+        return `toolCapabilities["${tool}"] is not a browser capability`
   }
   if (o.sessionSources !== undefined) {
     if (!Array.isArray(o.sessionSources)) return "`sessionSources` must be an array"

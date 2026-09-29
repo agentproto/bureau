@@ -195,15 +195,20 @@ export function createBureauHttpServer(opts: {
   port: number
   /** Authorize a `/mcp` request. Required: there is no open default. */
   authorize: Authorize
+  /** Extra JSON fields for `/health`, computed per request. Additive only: `ok`
+   *  and `tools` are always Bureau's own, and the status stays 200 whatever the
+   *  browser backend reports. */
+  healthExtras?: () => Record<string, unknown>
 }): HttpServer {
-  const { entries, extraRoutes, rateLimitDisabled, port, authorize } = opts
+  const { entries, extraRoutes, rateLimitDisabled, port, authorize, healthExtras } = opts
   const handleMcp = createMcpHandler(entries, { rateLimitDisabled })
 
   return createServer((req, res) => {
     if (extraRoutes?.(req, res)) return
     if (req.method === "GET" && req.url?.startsWith("/health")) {
       res.writeHead(200, { "content-type": "application/json" })
-      res.end(JSON.stringify({ ok: true, tools: entries.length }))
+      const { ok: _ok, tools: _tools, ...extras } = healthExtras?.() ?? {}
+      res.end(JSON.stringify({ ok: true, tools: entries.length, ...extras }))
       return
     }
     if (req.method === "POST" && req.url?.startsWith("/mcp")) {
