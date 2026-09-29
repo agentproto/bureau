@@ -28,7 +28,7 @@ export interface McpEntry {
   jsonSchema: Tool["inputSchema"]
   call: (
     args: Record<string, unknown>
-  ) => Promise<{ content: McpContentBlock[] }>
+  ) => Promise<{ content: McpContentBlock[]; isError?: boolean }>
 }
 
 /**

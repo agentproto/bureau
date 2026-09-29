@@ -78,14 +78,22 @@ describe("createBureauHttpServer — Host guard + authorize seam", () => {
   })
 
   it("rejects a POST /mcp whose Host header is not the loopback allowlist (DNS rebinding)", async () => {
-    server = createBureauHttpServer({ entries: ENTRIES, port: TEST_PORT })
+    server = createBureauHttpServer({
+      entries: ENTRIES,
+      port: TEST_PORT,
+      authorize: allowLoopback,
+    })
     await listen(server, TEST_PORT)
     const status = await postWithHost(TEST_PORT, "evil.com:1234", "{}")
     expect(status).toBe(403)
   })
 
-  it("accepts a POST /mcp with a loopback Host and the default (loopback) authorize", async () => {
-    server = createBureauHttpServer({ entries: ENTRIES, port: TEST_PORT })
+  it("accepts a POST /mcp with a loopback Host and an explicit allowLoopback authorize (studio flavour)", async () => {
+    server = createBureauHttpServer({
+      entries: ENTRIES,
+      port: TEST_PORT,
+      authorize: allowLoopback,
+    })
     await listen(server, TEST_PORT)
     const res = await fetch(`http://127.0.0.1:${TEST_PORT}/mcp`, {
       method: "POST",
@@ -118,7 +126,7 @@ describe("createBureauHttpServer — Host guard + authorize seam", () => {
     expect(res.status).toBe(401)
   })
 
-  it("default authorize (allowLoopback) is a plain function of the socket, not env/token-based", () => {
+  it("allowLoopback is a plain function of the socket, not env/token-based", () => {
     // Regression guard for PLAN-FINAL.md L0: no static token/env-token scheme.
     expect(typeof allowLoopback).toBe("function")
     expect(allowLoopback.toString()).not.toMatch(/process\.env/)

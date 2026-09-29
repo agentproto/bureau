@@ -17,6 +17,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { SessionStorePort } from "@agentproto/browser-profiles"
 import type { BrowserMcpToolDescriptor } from "@agentproto/bureau-mcp"
 import type { McpEntry } from "./mcp-tool.js"
+import type { Authorize } from "./lib/mcp-server.js"
 import type { CredentialStorePort } from "./lib/credentials.js"
 import type { HumanSession, SessionResolver } from "./lib/ports.js"
 import type { RecipeRegistry } from "./lib/recipe-registry.js"
@@ -25,6 +26,8 @@ import type { BureauSessionDeps, SessionSource } from "./lib/sessions.js"
 import { registerSessionSource } from "./lib/sessions.js"
 
 export type { SessionSource }
+export { allowLoopback, type Authorize, type AuthDecision } from "./lib/mcp-server.js"
+export { currentDevice, type DeviceIdentity } from "./lib/device-context.js"
 
 /** Outcome of a plugin's license check. */
 export type LicenseResult = { ok: true; tier?: string } | { ok: false; reason: string }
@@ -81,6 +84,9 @@ export interface BureauPlugin {
   /** Managed-session providers, registered before the catalogue is built. */
   sessionSources?: SessionSource[]
   license?: LicenseCheck
+  /** Replaces the OSS pairing authorize on `/mcp` (the studio flavour supplies
+   *  `allowLoopback`). At most one loaded plugin may set it. */
+  authorize?: Authorize
 }
 
 export class PluginLoadError extends Error {
@@ -102,7 +108,7 @@ export function pluginShapeProblem(p: unknown): string | undefined {
   const o = p as Record<string, unknown>
   if (typeof o.name !== "string" || !o.name.trim()) return "missing string `name`"
   if (typeof o.entries !== "function") return "missing `entries(ctx)` function"
-  for (const k of ["httpRoutes", "license"] as const) {
+  for (const k of ["httpRoutes", "license", "authorize"] as const) {
     if (o[k] !== undefined && typeof o[k] !== "function")
       return `\`${k}\` must be a function`
   }

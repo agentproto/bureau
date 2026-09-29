@@ -73,6 +73,62 @@ the workflow and recipe registries, the session-source and notifier factories,
 and `registerPlatformKit` for per-site knowledge. With no kit registered,
 generic `--url` flows keep working and no site is special-cased.
 
+## Pairing (the only auth)
+
+`/mcp` accepts one credential: a device bearer minted by pairing (AIP-59).
+There is no static token, no shared secret env var and no password. `/health`
+stays open and returns `{"ok":true,"tools":N}`. A missing or invalid bearer gets
+`401` with `WWW-Authenticate: Bearer realm="bureau"` and a body that says
+nothing about why. The Host and Origin guard stays on in front of both.
+
+State lives in `~/.agentproto/bureau` (override with `BUREAU_HOME`):
+`pairings.json` (mode 0600), `identity.json`, `grants.json`, and a control
+socket the CLI uses to talk to the running server.
+
+### Local: your own MCP host
+
+```bash
+bureau install-mcp                # claude (default)
+bureau install-mcp --client cursor
+```
+
+This mints a local device (no QR) and writes its bearer into the host's MCP
+config. It is idempotent: re-running replaces its own entry, revokes the
+superseded device and never duplicates. The bearer is never printed.
+
+### Remote: another machine or phone
+
+```bash
+bureau pair                       # prints a QR and a URL (server must be running)
+bureau pair --no-qr --ttl 300
+bureau devices list
+bureau devices revoke <id|name>   # takes effect on the very next request
+```
+
+The peer connects over an end-to-end encrypted rendezvous. The paired channel
+is forwarded to your local `/mcp` and `/health` only (any other path is `403`),
+with a credential injected by Bureau. The peer's own `Authorization` header
+never reaches the local server.
+
+**Hosted rendezvous.** Unless you pass `--rendezvous <url>` (a rendezvous you
+run yourself), pairing uses the hosted default. Traffic is end-to-end
+encrypted, but the operator of a hosted rendezvous can see connection metadata
+such as when and how often devices connect. `bureau pair` prints this warning
+every time it applies.
+
+### Per-device grants
+
+Consent grants (browser-profiles) are keyed by the paired device fingerprint.
+A session that has grants is usable only by devices those grants serve, and for
+the domains they cover: device A granted `github.com` can use the session
+there, device B cannot. A grant with no device serves every device.
+
+### Studio flavour
+
+A plugin may supply its own `authorize` (`BureauPlugin.authorize`), which
+replaces pairing. The studio flavour does this with the exported
+`allowLoopback` to keep its loopback-open default. Only one plugin may do so.
+
 ## Development
 
 ```bash

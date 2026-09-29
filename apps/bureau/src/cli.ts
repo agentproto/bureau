@@ -5,6 +5,7 @@
  *   bureau [serve]         start the capability server (MCP over HTTP)
  *   bureau start …         orchestrate Camofox + bureau serve in one shot
  *   bureau session …       manage saved browser identities (scan/save/list/show/rm)
+ *   bureau pair | devices | install-mcp   AIP-59 pairing (the only auth)
  *   bureau <plugin cmd> …  any subcommand a loaded plugin registers
  *
  * `--plugin <path|pkg>` (repeatable) and `BUREAU_PLUGINS=a,b` load plugins; a
@@ -52,6 +53,9 @@ const CORE_USAGE = `bureau — the browser stack's installable surface
   bureau [serve]         start the capability server (MCP over HTTP)
   bureau start …         orchestrate Camofox + bureau serve in one shot
   bureau session …       manage saved browser identities (scan/save/list/show/rm)
+  bureau pair            pair a remote device (QR + URL over the E2E rendezvous)
+  bureau devices …       list | revoke <fingerprint|name> paired devices
+  bureau install-mcp     pair a local MCP host (Claude Code, Cursor) and write its config
   bureau --version       print the installed Bureau version
 
   --plugin <path|pkg>    load a plugin (repeatable; or BUREAU_PLUGINS=a,b)`
@@ -90,6 +94,21 @@ async function dispatch(argv: string[], opts: CliOptions): Promise<void> {
     case "start": {
       const { runStart } = await import("./commands/start.js")
       process.exitCode = await runStart(rest, bundled)
+      return
+    }
+    case "pair": {
+      const { runPair } = await import("./commands/pair.js")
+      process.exitCode = await runPair(rest)
+      return
+    }
+    case "devices": {
+      const { runDevices } = await import("./commands/pair.js")
+      process.exitCode = await runDevices(rest)
+      return
+    }
+    case "install-mcp": {
+      const { runInstallMcp } = await import("./commands/install-mcp.js")
+      process.exitCode = await runInstallMcp(rest)
       return
     }
   }

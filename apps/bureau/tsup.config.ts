@@ -9,6 +9,8 @@ export default defineConfig({
     "src/plugin.ts",
     "src/commands/start.ts",
     "src/commands/session.ts",
+    "src/commands/pair.ts",
+    "src/commands/install-mcp.ts",
   ],
   format: ["esm"],
   target: "es2022",

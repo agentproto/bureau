@@ -26,23 +26,32 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import type { McpEntry } from "../mcp-tool.js"
 import { createRateLimiter, LIMITS, type RateLimiter } from "./rate-limit.js"
+import { runAsDevice, type DeviceIdentity } from "./device-context.js"
 
 /**
- * Authorize a request to `/mcp` — the seam a later lane (LP2, pairing) plugs
- * a real bearer/pairing check into. The default here (`allowLoopback`) MUST
- * stay the only implementation in THIS lane: PLAN-FINAL.md L0 is explicit
- * that no static token/env-token scheme belongs here, only pairing (LP2)
- * ever replaces this default. `/health` is never gated by this — it stays
- * open (`{ok:true,tools:N}`, additive fields only).
+ * What `authorize` decides for a `/mcp` request. `true`/`false` is enough for a
+ * flavour with no notion of a device (the studio's loopback-open default); the
+ * OSS default returns the paired device so per-device grants can key on it.
  */
-export type Authorize = (req: IncomingMessage) => boolean | Promise<boolean>
+export type AuthDecision =
+  | boolean
+  | { ok: boolean; device?: DeviceIdentity }
+
+/**
+ * Authorize a request to `/mcp`. The OSS flavour's authorize is AIP-59
+ * pairing (`createBureauPairing().authorize`): a device bearer in
+ * `Authorization`. There is no static token scheme. A plugin may supply its own
+ * (`BureauPlugin.authorize`); `/health` is never gated by this.
+ */
+export type Authorize = (req: IncomingMessage) => AuthDecision | Promise<AuthDecision>
 
 function isLoopbackSocket(req: IncomingMessage): boolean {
   const addr = req.socket.remoteAddress ?? ""
   return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
 }
 
-/** Default `authorize`: allow only callers on the loopback socket. */
+/** Loopback-only authorize. Not a default anywhere: a flavour that keeps its
+ *  loopback-open contract (the studio) opts in by supplying it explicitly. */
 export const allowLoopback: Authorize = req => isLoopbackSocket(req)
 
 /**
@@ -169,9 +178,10 @@ export function createMcpHandler(
  * loopback-guarded `/cred-capture/:token` credential page — the only
  * secret-accepting surface; its own loopback guard lives in that handler.
  *
- * `/mcp` is gated by a Host check (DNS-rebinding defense) and `authorize`
- * (default: loopback-only — F1/Decision 5). `/health` is NEVER gated — it
- * stays the open liveness probe (`{ok:true,tools:N}`, additive fields only). */
+ * `/mcp` is gated by a Host check (DNS-rebinding defense) and `authorize`,
+ * which the caller must supply (pairing for the OSS flavour). `/health` is
+ * NEVER gated: it stays the open liveness probe (`{ok:true,tools:N}`,
+ * additive fields only). */
 export function createBureauHttpServer(opts: {
   entries: McpEntry[]
   extraRoutes?: (req: IncomingMessage, res: ServerResponse) => boolean
@@ -183,12 +193,10 @@ export function createBureauHttpServer(opts: {
    *  allowlist. Must match the actual listen port or the Host check rejects
    *  every loopback request. */
   port: number
-  /** Authorize a `/mcp` request; default `allowLoopback`. A later lane (LP2)
-   *  replaces this with pairing — never add a static token scheme here. */
-  authorize?: Authorize
+  /** Authorize a `/mcp` request. Required: there is no open default. */
+  authorize: Authorize
 }): HttpServer {
-  const { entries, extraRoutes, rateLimitDisabled, port } = opts
-  const authorize = opts.authorize ?? allowLoopback
+  const { entries, extraRoutes, rateLimitDisabled, port, authorize } = opts
   const handleMcp = createMcpHandler(entries, { rateLimitDisabled })
 
   return createServer((req, res) => {
@@ -205,13 +213,23 @@ export function createBureauHttpServer(opts: {
         return
       }
       Promise.resolve(authorize(req))
-        .then(ok => {
+        .then(decision => {
+          const ok = typeof decision === "boolean" ? decision : decision.ok
           if (!ok) {
-            res.writeHead(401, { "content-type": "application/json" })
+            // No detail on why: a missing, malformed, unknown and revoked
+            // credential are indistinguishable to the caller.
+            res.writeHead(401, {
+              "content-type": "application/json",
+              "www-authenticate": 'Bearer realm="bureau"',
+            })
             res.end(JSON.stringify({ error: "unauthorized" }))
             return
           }
-          return handleMcp(req, res)
+          const device =
+            typeof decision === "boolean" ? undefined : decision.device
+          return device
+            ? runAsDevice(device, () => handleMcp(req, res))
+            : handleMcp(req, res)
         })
         .catch(err => {
           if (!res.headersSent)

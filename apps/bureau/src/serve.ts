@@ -50,7 +50,18 @@ import { keychainCredentialStore } from "./lib/credentials.js"
 import { createScrapeEntries } from "./lib/scrape-tools.js"
 import { createDownloadEntry } from "./lib/download-tools.js"
 import { createWorkflowEntries } from "./lib/workflow-tools.js"
-import { createBureauHttpServer } from "./lib/mcp-server.js"
+import { createBureauHttpServer, type Authorize } from "./lib/mcp-server.js"
+import { bureauHome, createBureauPairing, type BureauPairing } from "./lib/pairing.js"
+import { startControlServer, type ControlServer } from "./lib/pairing-control.js"
+import { gateEntriesByDevice } from "./lib/grant-gate.js"
+import {
+  chromeUserDataRoot,
+  createConsentHost,
+  createConsentLedger,
+  fileGrantStore,
+  localChromePort,
+} from "@agentproto/browser-profiles"
+import { join } from "node:path"
 import { recipeRegistry } from "./lib/recipe-registry.js"
 import { setWorkflowHooks } from "./lib/workflow-hooks.js"
 import { registerSampleRecipes } from "./recipes/index.js"
@@ -265,15 +276,50 @@ export async function runServe(
     ...extraPlugins,
     ...(await loadPlugins(pluginSpecs(argv))),
   ]
-  const { entries, extraRoutes, store, camofox } = buildCatalogue({ plugins })
+  const catalogue = buildCatalogue({ plugins })
+  const { extraRoutes, store, camofox } = catalogue
 
   const host = resolveHost(argv)
   const port = Number(process.env.PORT ?? process.env.BUREAU_PORT ?? 8830)
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  // Pairing (AIP-59) is the only auth in the OSS flavour. A loaded plugin (the
+  // studio flavour) may supply its own `authorize` instead; then no pairing
+  // registry runs and there is no device to key grants on.
+  const custom = plugins.filter(p => p.authorize)
+  if (custom.length > 1)
+    throw new PluginLoadError(
+      custom.map(p => p.name).join(", "),
+      "more than one plugin supplies `authorize`"
+    )
+  const log = (line: string): void => {
+    // eslint-disable-next-line no-console
+    console.log(line)
+  }
+  const home = bureauHome()
+  let pairing: BureauPairing | undefined
+  let authorize: Authorize
+  let entries = catalogue.entries
+  if (custom[0]?.authorize) {
+    authorize = custom[0].authorize
+  } else {
+    pairing = createBureauPairing({ home, port, log: line => log(`[pairing] ${line}`) })
+    authorize = pairing.authorize
+    const consent = createConsentHost({
+      grants: fileGrantStore(join(home, "grants.json")),
+      ledger: createConsentLedger({ path: join(home, "consent-ledger.jsonl") }),
+      store,
+      jarDir: join(home, "grant-jars"),
+      chrome: localChromePort({ chromeRoot: chromeUserDataRoot() }),
+    })
+    entries = gateEntriesByDevice(entries, consent)
+  }
 
   // ── HTTP server ────────────────────────────────────────────────────────────
   const httpServer = createBureauHttpServer({
     entries,
     extraRoutes,
+    authorize,
     rateLimitDisabled: boolEnv("BUREAU_RATELIMIT_DISABLED"),
     port,
   })
@@ -299,7 +345,29 @@ export async function runServe(
       }),
   })
 
+  let control: ControlServer | undefined
+  const stopPairing = async (): Promise<void> => {
+    await control?.close().catch(() => {})
+    await pairing?.registry.shutdown().catch(() => {})
+  }
+  httpServer.on("close", () => void stopPairing())
+  for (const sig of ["SIGINT", "SIGTERM"] as const)
+    process.once(sig, () => void stopPairing().finally(() => process.exit(0)))
+
   httpServer.listen(port, host, () => {
+    if (pairing) {
+      const active = pairing
+      void (async (): Promise<void> => {
+        try {
+          control = await startControlServer(home, active.registry, log)
+        } catch (e) {
+          log(`[pairing] no control socket: ${e instanceof Error ? e.message : String(e)}`)
+        }
+        await active.registry.startAutoconnect().catch(e => {
+          log(`[pairing] autoconnect failed: ${e instanceof Error ? e.message : String(e)}`)
+        })
+      })()
+    }
     // eslint-disable-next-line no-console
     console.log(
       `bureau capability server on ${host}:${port} — ${entries.length} tools${plugins.length ? ` (plugins: ${plugins.map(p => p.name).join(", ")})` : ""} (MCP POST /mcp, health GET /health, watch WS /watch/:tab)`
