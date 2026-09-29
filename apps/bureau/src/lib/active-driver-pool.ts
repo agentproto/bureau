@@ -54,6 +54,43 @@ export interface ActiveDriverPoolOptions {
   now?: () => number
   sleep?: (ms: number) => Promise<void>
   log?: (s: string) => void
+  /** A live session became usable (its resolve succeeded). Metering hook. */
+  onSessionOpen?: (id: string) => void
+  /** A session left the pool after it had opened. Metering hook. */
+  onSessionClose?: (id: string) => void
+}
+
+/** The pool map, reporting when a session opens (resolve succeeded) and closes (evicted). */
+class ObservedPool extends Map<string, Promise<HumanSession>> {
+  private readonly opened = new Set<string>()
+  constructor(
+    private readonly onOpen: ((id: string) => void) | undefined,
+    private readonly onClose: ((id: string) => void) | undefined
+  ) {
+    super()
+  }
+  override set(id: string, value: Promise<HumanSession>): this {
+    super.set(id, value)
+    if (this.onOpen)
+      value.then(
+        () => {
+          if (this.get(id) === value && !this.opened.has(id)) {
+            this.opened.add(id)
+            this.onOpen?.(id)
+          }
+        },
+        () => {}
+      )
+    return this
+  }
+  override delete(id: string): boolean {
+    const had = super.delete(id)
+    if (this.opened.delete(id)) this.onClose?.(id)
+    return had
+  }
+  override clear(): void {
+    for (const id of [...this.keys()]) this.delete(id)
+  }
 }
 
 function evictOnDeadTab(
@@ -118,7 +155,10 @@ export function createActiveDriverPool(
   pooledResolver: SessionResolver
   pool: Map<string, Promise<HumanSession>>
 } {
-  const pool = new Map<string, Promise<HumanSession>>()
+  const pool: Map<string, Promise<HumanSession>> =
+    opts.onSessionOpen || opts.onSessionClose
+      ? new ObservedPool(opts.onSessionOpen, opts.onSessionClose)
+      : new Map<string, Promise<HumanSession>>()
   const log = opts.log ?? (() => {})
 
   const resolvePooledDriver = (id: string): Promise<HumanSession> => {

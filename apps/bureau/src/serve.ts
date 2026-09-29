@@ -41,6 +41,7 @@ import {
   createActEntry,
   createSessionAwareControlEntries,
 } from "./lib/active-driver-pool.js"
+import { currentDevice, runAsDevice, type DeviceIdentity } from "./lib/device-context.js"
 import { createIntrospectionEntries } from "./lib/introspection-tools.js"
 import { createSyncEntry } from "./lib/sync-tools.js"
 import { keychainCredentialStore } from "./lib/credentials.js"
@@ -50,7 +51,21 @@ import { createWorkflowEntries } from "./lib/workflow-tools.js"
 import { createBureauHttpServer, type Authorize } from "./lib/mcp-server.js"
 import { bureauHome, createBureauPairing, type BureauPairing } from "./lib/pairing.js"
 import { startControlServer, type ControlServer } from "./lib/pairing-control.js"
-import { gateEntriesByDevice } from "./lib/grant-gate.js"
+import { assertDeviceMaySeeSession, gateEntriesByDevice } from "./lib/grant-gate.js"
+import { ConsentRequiredError } from "@agentproto/browser-profiles"
+import { createLeaseLedger, leaseLedgerPathIn } from "./lib/lease-ledger.js"
+import { loadApproverPublic } from "./lib/lease-approval.js"
+import { createLeaseService, type LeaseService, type LeaseServiceOptions } from "./lib/session-lease.js"
+import { createLiveView, type LiveViewOptions } from "./lib/live-view.js"
+import {
+  DEFAULT_HEARTBEAT_MS,
+  createBrowserUsageTracker,
+  createJsonlUsageMeter,
+  noopUsageTracker,
+  type BrowserUsageTracker,
+  type UsageClock,
+} from "./lib/usage-meter.js"
+import type { HumanSession } from "./lib/ports.js"
 import {
   chromeUserDataRoot,
   createConsentHost,
@@ -88,6 +103,7 @@ import { registerSampleRecipes } from "./recipes/index.js"
 import { attachWatch } from "./lib/watch.js"
 import { boolEnv, parseArgs } from "./lib/args.js"
 import {
+  PluginLicenseError,
   PluginLoadError,
   activatePlugins,
   checkLicense,
@@ -118,6 +134,8 @@ export interface BureauCatalogue {
   browsers: BrowserRegistry
   /** The active browser whose capabilities gate the tools. */
   browser: BrowserProvider
+  /** Live sessions (the active-driver pool), read by the live view. */
+  pool: Map<string, Promise<HumanSession>>
 }
 
 export interface CatalogueOptions {
@@ -127,6 +145,8 @@ export interface CatalogueOptions {
   browsers?: BrowserRegistry
   /** The active browser (default: camofox). Tools it lacks the capability for answer with a typed error. */
   browser?: BrowserProvider
+  /** Told when a live session opens and closes (browser-minute metering). */
+  sessionUsage?: BrowserUsageTracker
 }
 
 /** Build the full tool catalogue — every entry `runServe` registers, minus
@@ -185,7 +205,15 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
   const base = sessionResolver(sessionDeps)
   const { resolvePooledDriver, pooledResolver, pool } = createActiveDriverPool(
     base,
-    { log }
+    {
+      log,
+      ...(opts.sessionUsage
+        ? {
+            onSessionOpen: (id: string): void => opts.sessionUsage?.sessionStarted(id, currentDevice()?.fingerprint),
+            onSessionClose: (id: string): void => opts.sessionUsage?.sessionStopped(id),
+          }
+        : {}),
+    }
   )
 
   // browser_navigate / browser_evaluate are otherwise permanently bound to the
@@ -263,7 +291,7 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
   for (const plugin of plugins) Object.assign(toolCapabilities, plugin.toolCapabilities)
   const gated = gateEntriesByCapability(entries, { active: browser, registry: browsers, extra: toolCapabilities })
 
-  return { entries: gated, extraRoutes, store, camofox, browsers, browser }
+  return { entries: gated, extraRoutes, store, camofox, browsers, browser, pool }
 }
 
 /** Parse `--host <h>` (else `$BUREAU_HOST`, else `127.0.0.1`) — the default
@@ -290,6 +318,14 @@ export interface ServeDeps {
   runtime?: Pick<BrowserRuntimeOptions, "clock" | "healthIntervalMs" | "crashLoop" | "launchBudgetMs">
   /** Called when the browser launch fails in a way retrying cannot fix. Default: exit code 1. */
   onFatal?: (error: Error) => void
+  /** Usage meter (default: a plugin's, else the `--usage-file` JSONL sink, else a noop). */
+  usage?: UsageMeter
+  /** Clock for browser-minute metering (default: the wall clock and real timers). */
+  usageClock?: UsageClock
+  /** Session lease tuning (clock, ids, ttl cap, expiry timers). */
+  lease?: Pick<LeaseServiceOptions, "now" | "newId" | "maxTtlSeconds" | "defaultTtlSeconds" | "timers">
+  /** Live view tuning (frame interval and stream limits). */
+  live?: Pick<LiveViewOptions, "intervalMs" | "minIntervalMs" | "maxStreamsPerDevice" | "maxStreamMs">
 }
 
 export interface ServeHandle {
@@ -334,11 +370,29 @@ export async function runServe(
     })
   }
 
-  for (const plugin of extraPlugins) await checkLicense(plugin)
-  const plugins = [
-    ...extraPlugins,
-    ...(await loadPlugins(pluginSpecs(argv))),
-  ]
+  const log = deps.log ?? ((line: string): void => {
+    // eslint-disable-next-line no-console
+    console.log(line)
+  })
+
+  // A plugin refused by its license is dropped and the core keeps serving; every
+  // other plugin failure still aborts the boot. A plugin with no `license` is never asked.
+  const licenseRefusals: Array<{ plugin: string; reason: string }> = []
+  const refuse = (e: PluginLicenseError): void => {
+    licenseRefusals.push({ plugin: e.spec, reason: e.reason })
+    log(`[bureau] ${e.message}. The plugin is not loaded; the core keeps serving.`)
+  }
+  const licensed: BureauPlugin[] = []
+  for (const plugin of extraPlugins) {
+    try {
+      await checkLicense(plugin)
+      licensed.push(plugin)
+    } catch (e) {
+      if (e instanceof PluginLicenseError) refuse(e)
+      else throw e
+    }
+  }
+  const plugins = [...licensed, ...(await loadPlugins(pluginSpecs(argv), { onLicenseRefused: refuse }))]
 
   const { flags } = parseArgs(argv)
   const managed = flags["no-browser"] !== "true"
@@ -355,11 +409,6 @@ export async function runServe(
       custom.map(p => p.name).join(", "),
       "more than one plugin supplies `authorize`"
     )
-  const log = deps.log ?? ((line: string): void => {
-    // eslint-disable-next-line no-console
-    console.log(line)
-  })
-
   // The consent host is built after the catalogue (it needs the session store),
   // but `--full-profile` is resolved before it, so the proof looks it up lazily.
   let consent: ReturnType<typeof createConsentHost> | undefined
@@ -387,7 +436,24 @@ export async function runServe(
   if (plan.provider.id === DEFAULT_BROWSER_ID && plan.options.baseUrl !== undefined)
     env["CAMOFOX_URL"] = plan.options.baseUrl
 
-  const catalogue = buildCatalogue({ plugins, browsers: registry, browser: plan.provider })
+  // ── Usage metering ─────────────────────────────────────────────────────────
+  // One meter: a plugin's own, else the injected one, else the JSONL file sink
+  // (`--usage-file` / BUREAU_USAGE_FILE), else the noop default (emits nothing).
+  const meters = plugins.filter(p => p.usage)
+  if (meters.length > 1)
+    throw new PluginLoadError(meters.map(p => p.name).join(", "), "more than one plugin supplies `usage`")
+  const usageFile = flags["usage-file"] && flags["usage-file"] !== "true" ? flags["usage-file"] : env["BUREAU_USAGE_FILE"]
+  const meter: UsageMeter = meters[0]?.usage ?? deps.usage ?? (usageFile ? createJsonlUsageMeter({ path: usageFile }) : noopUsageMeter)
+  const heartbeatRaw = flags["usage-heartbeat-ms"] ?? env["BUREAU_USAGE_HEARTBEAT_MS"]
+  const heartbeatMs = heartbeatRaw === undefined ? DEFAULT_HEARTBEAT_MS : Number(heartbeatRaw)
+  if (!Number.isInteger(heartbeatMs) || heartbeatMs < 1)
+    throw new Error("bureau: --usage-heartbeat-ms must be a positive whole number of milliseconds")
+  const usageTracker: BrowserUsageTracker =
+    meter.browser === undefined
+      ? noopUsageTracker
+      : createBrowserUsageTracker({ meter, browser: plan.provider.id, heartbeatMs, ...(deps.usageClock ? { clock: deps.usageClock } : {}) })
+
+  const catalogue = buildCatalogue({ plugins, browsers: registry, browser: plan.provider, usage: meter, sessionUsage: usageTracker })
   const { extraRoutes, store, camofox } = catalogue
 
   const host = resolveHost(argv)
@@ -395,6 +461,7 @@ export async function runServe(
   const home = deps.home ?? bureauHome(env)
 
   let pairing: BureauPairing | undefined
+  let lease: LeaseService | undefined
   let authorize: Authorize
   let entries = catalogue.entries
   if (custom[0]?.authorize) {
@@ -410,6 +477,20 @@ export async function runServe(
       chrome: localChromePort({ chromeRoot: chromeUserDataRoot() }),
     })
     entries = gateEntriesByDevice(entries, consent)
+    // Added after the device gate: the lease tools do their own device, grant
+    // and approval checks and must answer with a ledgered deny, not a consent error.
+    lease = createLeaseService({
+      home,
+      consent,
+      ledger: createLeaseLedger({ path: leaseLedgerPathIn(home) }),
+      approver: () => loadApproverPublic(home),
+      log: line => log(line),
+      ...deps.lease,
+    })
+    const taken = new Set(entries.map(e => e.name))
+    for (const entry of lease.entries())
+      if (taken.has(entry.name)) throw new PluginLoadError(entry.name, `tool "${entry.name}" is reserved for the session lease`)
+    entries = [...entries, ...lease.entries()]
     if (browserFlags.fullProfile !== undefined) consent.fullProfileProof({ grantId: browserFlags.fullProfile })
   }
 
@@ -419,9 +500,40 @@ export async function runServe(
         provider: plan.provider,
         launchOptions: plan.options,
         log: line => log(`[browser] ${line}`),
+        usage: usageTracker,
         ...deps.runtime,
       })
     : undefined
+
+  // ── Live view ──────────────────────────────────────────────────────────────
+  // Read-only screenshots of an already open session, behind the same pairing
+  // authorize and the calling device's grants (no device, no consent host: pass).
+  const consentHost = consent
+  const liveView = createLiveView({
+    ...deps.live,
+    log: line => log(line),
+    mayView: (device: DeviceIdentity | undefined, session: string): boolean => {
+      if (!device || !consentHost) return true
+      try {
+        runAsDevice(device, () => assertDeviceMaySeeSession(consentHost, { session }))
+        return true
+      } catch (e) {
+        if (e instanceof ConsentRequiredError) return false
+        throw e
+      }
+    },
+    frames: async session => {
+      const open = catalogue.pool.get(session)
+      if (!open) return undefined
+      const human = await open
+      const screenshot = human.screenshot
+      if (!screenshot) return undefined
+      return async () => {
+        const shot = await screenshot.call(human, { format: "jpeg", quality: 60 })
+        return { bytes: Buffer.from(shot.imageBase64, "base64"), mime: shot.mimeType }
+      }
+    },
+  })
 
   // ── HTTP server ────────────────────────────────────────────────────────────
   const httpServer = createBureauHttpServer({
@@ -430,7 +542,11 @@ export async function runServe(
     authorize,
     rateLimitDisabled: boolEnv("BUREAU_RATELIMIT_DISABLED"),
     port,
-    healthExtras: () => ({ ...(runtime ? runtime.status() : unmanagedStatus(plan.provider.id, startedAt)) }),
+    healthExtras: () => ({
+      ...(runtime ? runtime.status() : unmanagedStatus(plan.provider.id, startedAt)),
+      ...(licenseRefusals.length > 0 ? { licenseRefusals } : {}),
+    }),
+    liveView,
   })
 
   // Live watch: WebSocket upgrade on the same port (camofox screenshot-poll).
@@ -465,6 +581,8 @@ export async function runServe(
   const shutdown = (opts: { keepState?: boolean } = {}): Promise<void> => {
     closing ??= (async (): Promise<void> => {
       await runtime?.stop().catch(() => {})
+      usageTracker.stopAll()
+      lease?.close()
       await control?.close().catch(() => {})
       await pairing?.registry.shutdown().catch(() => {})
       // A fatal launch error stays in the state file so `bureau start --detach` can report it.

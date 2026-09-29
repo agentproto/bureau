@@ -13,6 +13,7 @@ import {
   type SupervisorClock,
   type SupervisorState,
 } from "@agentproto/driver-browser"
+import type { BrowserUsageTracker } from "./usage-meter.js"
 
 /** Bureau's view of the supervisor state, as reported by `/health`. */
 export type BureauBrowserState = "starting" | "healthy" | "degraded" | "crash-looping" | "stopped"
@@ -67,6 +68,8 @@ export interface BrowserRuntimeOptions {
   launchBudgetMs?: number
   now?: () => Date
   log?: (line: string) => void
+  /** Metering hook: told when the supervised instance starts running and when it stops. */
+  usage?: BrowserUsageTracker
 }
 
 export interface BrowserRuntime {
@@ -121,8 +124,15 @@ export function createBrowserRuntime(opts: BrowserRuntimeOptions): BrowserRuntim
     ...(opts.launchBudgetMs !== undefined ? { launchBudgetMs: opts.launchBudgetMs } : {}),
     ...(opts.crashLoop ? { crashLoop: opts.crashLoop } : {}),
     log,
-    onStateChange: () => {
+    onStateChange: state => {
       since = now().toISOString()
+      if (!opts.usage) return
+      if (state === "running" || state === "idle") {
+        const instance = supervisor.status().instance
+        if (instance) opts.usage.instanceStarted(instance.id)
+      } else if (state === "down" || state === "crash-looping" || state === "stopped") {
+        opts.usage.instanceStopped()
+      }
     },
     onBackendRestart: () => {
       backendRestarts += 1
@@ -145,14 +155,23 @@ export function createBrowserRuntime(opts: BrowserRuntimeOptions): BrowserRuntim
     browser: opts.provider.id,
     start: () => {
       started = true
-      return surface(() => supervisor.start())
+      return surface(() => supervisor.start()).then(instance => {
+        opts.usage?.instanceStarted(instance.id)
+        return instance
+      })
     },
     restart: () => {
       started = true
       fatal = undefined
       return surface(() => supervisor.restart())
     },
-    stop: () => supervisor.stop(),
+    stop: async () => {
+      try {
+        await supervisor.stop()
+      } finally {
+        opts.usage?.instanceStopped()
+      }
+    },
     instance: () => supervisor.status().instance,
     lastError: () => lastError,
     status() {

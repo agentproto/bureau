@@ -111,6 +111,7 @@ to tools: `cdp` (`browser_list_requests`, `browser_get_request_body`,
 | `restarts` | relaunches since Bureau started |
 | `wasAlreadyRunning` | Bureau reused a browser it did not start |
 | `since` | ISO time the current state began |
+| `licenseRefusals` | only when a plugin was refused by its license: `[{plugin, reason}]` |
 
 Bureau's own `/health` always answers HTTP 200, so a crashing browser never
 takes Bureau down; read `state`. Only the Camofox server itself answers 503 when
@@ -226,6 +227,72 @@ there, device B cannot. A grant with no device serves every device.
 A plugin may supply its own `authorize` (`BureauPlugin.authorize`), which
 replaces pairing. The studio flavour does this with the exported
 `allowLoopback` to keep its loopback-open default. Only one plugin may do so.
+
+## Business hooks
+
+Four seams let a hosted or paid product sit on top of the open core. The core
+ships the port and a safe default for each; a plugin supplies the rest. None of
+them can block the core: with no plugin, or a plugin that asks for nothing, they
+are inert.
+
+### Usage meter
+
+A `UsageMeter` receives one `start`, then a `heartbeat` every minute, then one
+`stop` for the browser instance and for each live session. An event holds only
+ids, the browser id, a duration and the paired device fingerprint (never a URL,
+cookie or token). The default is a noop.
+
+- `--usage-file <path>` (or `BUREAU_USAGE_FILE`) turns on the JSONL sink: append
+  only, file `0600`, directory `0700`.
+- `--usage-heartbeat-ms <n>` (or `BUREAU_USAGE_HEARTBEAT_MS`) changes the
+  heartbeat; default 60000.
+- A plugin can set `usage: { record, browser }` to meter its own way. It wins
+  over the file sink. At most one plugin may set it.
+
+### Session lease
+
+`session_lease` lends only the granted domains' session cookies, for one run
+(default 300 s, at most 900 s), to a paired device. It needs a human approval,
+made in a terminal: `bureau session lease-approve --session ID --device FP
+--domains a.com,b.com`. There is no `--yes`. The approval is an ed25519 signed
+record (AIP-7 shape: request, payload, signature; `signerKind: user`,
+`click_through`) signed by a local approver key in the Bureau home. A lease is
+refused for a domain the approval or the device's active grant does not cover, a
+replayed or expired approval, a bad signature, or a call with no approval id.
+`session_lease_revoke` ends a lease; the next `session_lease` call with its
+`leaseId` is refused. Each issue, use, revoke, expiry and deny is a row in a
+hash-chained `lease-ledger.jsonl` (ids, domains, counts, a fixed code; never a
+cookie value).
+
+Receiver contract: keep the returned cookies in memory only, never write them to
+disk, a log or a cache; call `session_lease` with the `leaseId` before each use;
+drop them on any refusal, at `expiresAt`, and after a revoke. Bureau stores no
+cookie in the lease record and re-checks the grant on every use, so revoking the
+consent grant also ends the lease. The tools exist only where a consent host
+does (the pairing flavour). Under a plugin `authorize` such as the studio's
+`allowLoopback` there is no consent host, so no lease tools.
+
+### Pro license
+
+A plugin may set `license`, a check run once when it loads. `createLicenseCheck`
+verifies a compact token: `<header>.<payload>.<signature>`, base64url, header
+`{"alg":"EdDSA","typ":"bureau-license"}`, payload `{sub, exp, features[],
+tier?}`, signature ed25519 over `<header>.<payload>`. The public key is the
+plugin's. An unsigned, expired or tampered token refuses that plugin with a
+message that never echoes the token; the refusal is logged and listed in
+`/health` as `licenseRefusals`, and the core keeps serving. Bureau ships no
+signer.
+
+### Live view
+
+`GET /live/<session>` streams screenshots of an already open session as MJPEG
+(`multipart/x-mixed-replace`). MJPEG shows in a plain `<img>`, sends raw JPEG
+bytes (SSE would base64 each frame) and is ordinary chunked HTTP, so the pairing
+tunnel forwards it. It uses the same pairing `authorize` as `/mcp` (401 with no
+detail) and the per-device grant check (403). It is read only: every method but
+GET is 405, it never opens a session (404), frames are at least 250 ms apart, a
+device gets at most 3 streams, and a stream ends after 10 minutes or when the
+grant is revoked. Takeover (input from the viewer): not in v1.
 
 ## Development
 

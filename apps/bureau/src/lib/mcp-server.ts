@@ -27,6 +27,7 @@ import {
 import type { McpEntry } from "../mcp-tool.js"
 import { createRateLimiter, LIMITS, type RateLimiter } from "./rate-limit.js"
 import { runAsDevice, type DeviceIdentity } from "./device-context.js"
+import type { LiveViewHandler } from "./live-view.js"
 
 /**
  * What `authorize` decides for a `/mcp` request. `true`/`false` is enough for a
@@ -171,6 +172,52 @@ export function createMcpHandler(
   }
 }
 
+const LIVE_PREFIX = "/live/"
+
+const isLivePath = (url: string | undefined): boolean => (url ?? "").split("?")[0]?.startsWith(LIVE_PREFIX) === true
+
+/** `/live/<session>`: 405 for anything but GET, then Host, then `authorize` (401), then the view. No request body is ever read. */
+function handleLive(
+  req: IncomingMessage,
+  res: ServerResponse,
+  port: number,
+  authorize: Authorize,
+  liveView: LiveViewHandler
+): void {
+  const fail = (status: number, error: string, extra: Record<string, string> = {}): void => {
+    res.writeHead(status, { "content-type": "application/json", ...extra })
+    res.end(JSON.stringify({ error }))
+  }
+  if (req.method !== "GET") {
+    req.resume()
+    fail(405, "method not allowed", { allow: "GET" })
+    return
+  }
+  if (!validHost(req, port)) {
+    fail(403, "invalid host")
+    return
+  }
+  const segments = (req.url ?? "").split("?")[0]!.slice(LIVE_PREFIX.length).split("/")
+  let session: string | undefined
+  try {
+    session = segments.length === 1 && segments[0] !== "" ? decodeURIComponent(segments[0]!) : undefined
+  } catch {
+    session = undefined
+  }
+  Promise.resolve(authorize(req))
+    .then(decision => {
+      const ok = typeof decision === "boolean" ? decision : decision.ok
+      if (!ok) return fail(401, "unauthorized", { "www-authenticate": 'Bearer realm="bureau"' })
+      if (session === undefined) return fail(404, "not found")
+      const device = typeof decision === "boolean" ? undefined : decision.device
+      return liveView(req, res, session, device)
+    })
+    .catch(() => {
+      if (!res.headersSent) fail(500, "internal error")
+      else res.end()
+    })
+}
+
 /** Start the Bureau HTTP server: POST /mcp, GET /health, + any extra routes.
  *
  * `extraRoutes` is a fall-through handler tried BEFORE the 404 (and before MCP):
@@ -199,11 +246,17 @@ export function createBureauHttpServer(opts: {
    *  and `tools` are always Bureau's own, and the status stays 200 whatever the
    *  browser backend reports. */
   healthExtras?: () => Record<string, unknown>
+  /** Read-only `GET /live/<session>` stream. Runs after the Host check and `authorize`, and only ever for GET. */
+  liveView?: LiveViewHandler
 }): HttpServer {
-  const { entries, extraRoutes, rateLimitDisabled, port, authorize, healthExtras } = opts
+  const { entries, extraRoutes, rateLimitDisabled, port, authorize, healthExtras, liveView } = opts
   const handleMcp = createMcpHandler(entries, { rateLimitDisabled })
 
   return createServer((req, res) => {
+    if (liveView && isLivePath(req.url)) {
+      handleLive(req, res, port, authorize, liveView)
+      return
+    }
     if (extraRoutes?.(req, res)) return
     if (req.method === "GET" && req.url?.startsWith("/health")) {
       res.writeHead(200, { "content-type": "application/json" })

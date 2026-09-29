@@ -63,6 +63,7 @@ import {
   cmdRevoke,
   type SessionConsentDeps,
 } from "./session-consent.js"
+import { cmdLeaseApprove } from "./session-lease.js"
 
 const USAGE = `bureau session — manage saved browser identities
 
@@ -76,6 +77,9 @@ const USAGE = `bureau session — manage saved browser identities
                                               --full-profile --yes grants the whole profile (local only)
   bureau session grants [--all]             consent grants only (--all includes revoked and expired)
   bureau session revoke <domain|grant-id>   revoke a grant: deletes the derived cookies and records it in the ledger
+  bureau session lease-approve --session ID --device FP --domains a.com,b.com [--ttl 300] [--valid-for 600]
+                                            a human signs a single-use approval so that paired device may lease those
+                                              granted domains' cookies (session_lease). Needs a terminal; there is no --yes
   bureau session show <id> [--verify]       a saved session + login status
                                             (heuristic: cookie name + expiry, no network — can't
                                               tell a stale-but-unexpired cookie VALUE from a live one)
@@ -701,6 +705,8 @@ export async function runSession(
       return cmdGrants(flags, consentDeps)
     case "revoke":
       return cmdRevoke(arg, consentDeps)
+    case "lease-approve":
+      return cmdLeaseApprove(flags, consentDeps)
     case "show":
       return cmdShow(arg, flags)
     case "save":

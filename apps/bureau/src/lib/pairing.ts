@@ -33,7 +33,7 @@ import type { Authorize } from "./mcp-server.js"
 export const PAIRED_DEVICE_HEADER = "x-bureau-paired-device"
 
 /** The only paths a remote paired peer may request. */
-export const REMOTE_ALLOW_PATHS: readonly string[] = ["/mcp", "/health"]
+export const REMOTE_ALLOW_PATHS: readonly string[] = ["/mcp", "/health", "/live/*"]
 
 /** Bureau's state dir: pairings, identity, grants, control socket. `BUREAU_HOME` overrides (tests, multi-instance). */
 export function bureauHome(env: NodeJS.ProcessEnv = process.env): string {

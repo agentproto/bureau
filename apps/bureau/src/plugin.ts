@@ -29,6 +29,19 @@ import { registerSessionSource } from "./lib/sessions.js"
 export type { SessionSource }
 export { allowLoopback, type Authorize, type AuthDecision } from "./lib/mcp-server.js"
 export { currentDevice, type DeviceIdentity } from "./lib/device-context.js"
+export {
+  createLicenseCheck,
+  verifyLicenseToken,
+  type LicenseCheckOptions,
+  type LicensePayload,
+  type LicenseVerdict,
+} from "./lib/license.js"
+export {
+  createBrowserUsageTracker,
+  createJsonlUsageMeter,
+  noopUsageTracker,
+  type BrowserUsageTracker,
+} from "./lib/usage-meter.js"
 
 /** Outcome of a plugin's license check. */
 export type LicenseResult = { ok: true; tier?: string } | { ok: false; reason: string }
@@ -44,9 +57,32 @@ export interface UsageEvent {
   ms: number
 }
 
+/**
+ * One browser-minute metering event. `start` opens a metered span, `heartbeat`
+ * fires every heartbeat interval while it stays open, `stop` closes it with the
+ * total. Only ids, the browser id, a duration and the paired device fingerprint
+ * travel here: never a URL, a query string, a cookie or a token.
+ */
+export interface BrowserUsageEvent {
+  kind: "browser-minute"
+  type: "start" | "heartbeat" | "stop"
+  /** `instance`: the supervised browser process. `session`: one live saved session. */
+  scope: "instance" | "session"
+  browser: string
+  instanceId?: string
+  sessionId?: string
+  deviceFingerprint?: string
+  /** ISO time of the event. */
+  at: string
+  /** Time since the span started (0 on `start`). */
+  durationMs: number
+}
+
 /** Optional usage reporting; core's default discards everything. */
 export interface UsageMeter {
   record(event: UsageEvent): void | Promise<void>
+  /** Browser-minute events. Absent on a meter that only counts tool calls. */
+  browser?(event: BrowserUsageEvent): void | Promise<void>
 }
 
 export const noopUsageMeter: UsageMeter = { record: () => {} }
@@ -85,6 +121,8 @@ export interface BureauPlugin {
   /** Managed-session providers, registered before the catalogue is built. */
   sessionSources?: SessionSource[]
   license?: LicenseCheck
+  /** This plugin's own usage meter, used instead of the file sink or the noop default. At most one loaded plugin may set it. */
+  usage?: UsageMeter
   /** Replaces the OSS pairing authorize on `/mcp` (the studio flavour supplies
    *  `allowLoopback`). At most one loaded plugin may set it. */
   authorize?: Authorize
@@ -107,6 +145,17 @@ export class PluginLoadError extends Error {
   }
 }
 
+/** A plugin refused by its own license check. `runServe` drops such a plugin and keeps serving the core. */
+export class PluginLicenseError extends PluginLoadError {
+  constructor(
+    spec: string,
+    readonly reason: string
+  ) {
+    super(spec, `license refused: ${reason}`)
+    this.name = "PluginLicenseError"
+  }
+}
+
 const detailOf = (e: unknown): string =>
   e instanceof Error ? e.message : String(e)
 
@@ -119,6 +168,12 @@ export function pluginShapeProblem(p: unknown): string | undefined {
   for (const k of ["httpRoutes", "license", "authorize"] as const) {
     if (o[k] !== undefined && typeof o[k] !== "function")
       return `\`${k}\` must be a function`
+  }
+  if (o.usage !== undefined) {
+    const u = o.usage as Record<string, unknown> | null
+    if (!u || typeof u !== "object" || typeof u.record !== "function")
+      return "`usage` must be a meter with a `record()` function"
+    if (u.browser !== undefined && typeof u.browser !== "function") return "`usage.browser` must be a function"
   }
   if (o.commands !== undefined) {
     if (!o.commands || typeof o.commands !== "object")
@@ -215,17 +270,27 @@ export async function checkLicense(
   try {
     result = await plugin.license()
   } catch (e) {
-    throw new PluginLoadError(spec, `license check threw: ${detailOf(e)}`)
+    throw new PluginLicenseError(spec, `the license check threw: ${detailOf(e)}`)
   }
-  if (!result.ok) throw new PluginLoadError(spec, `license refused: ${result.reason}`)
+  if (!result.ok) throw new PluginLicenseError(spec, result.reason)
 }
 
-/** Load every spec in order; the first failure rejects (fail loud). */
+/** Load every spec in order; the first failure rejects (fail loud). With
+ *  `onLicenseRefused`, a plugin refused by its license is reported through it and
+ *  skipped instead (every other failure still rejects). */
 export async function loadPlugins(
-  specs: readonly string[]
+  specs: readonly string[],
+  opts: { onLicenseRefused?: (error: PluginLicenseError) => void } = {}
 ): Promise<BureauPlugin[]> {
   const out: BureauPlugin[] = []
-  for (const spec of specs) out.push(await loadPlugin(spec))
+  for (const spec of specs) {
+    try {
+      out.push(await loadPlugin(spec))
+    } catch (e) {
+      if (e instanceof PluginLicenseError && opts.onLicenseRefused) opts.onLicenseRefused(e)
+      else throw e
+    }
+  }
   return out
 }
 
