@@ -42,7 +42,7 @@
           },
           "session": {
             "type": "string",
-            "description": "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
+            "description": "Saved logged-in identity to drive (e.g. linkedin-demo). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
           }
         },
         "required": [
@@ -77,7 +77,7 @@
           },
           "session": {
             "type": "string",
-            "description": "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
+            "description": "Saved logged-in identity to drive (e.g. linkedin-demo). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
           }
         },
         "required": [
@@ -180,7 +180,7 @@
           },
           "session": {
             "type": "string",
-            "description": "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
+            "description": "Saved logged-in identity to drive (e.g. linkedin-demo). When set, runs against that session's own authenticated tab (same pooled tab as browser_act) instead of the anonymous control tab."
           }
         }
       }
@@ -307,7 +307,7 @@
         "properties": {
           "session": {
             "type": "string",
-            "description": "Saved logged-in identity to act AS (e.g. x-agentik)."
+            "description": "Saved logged-in identity to act AS (e.g. x-demo)."
           },
           "action": {
             "type": "string",

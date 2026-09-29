@@ -18,25 +18,27 @@ metadata:
 
 # Bureau — the installable browser capability server
 
-## Démarrage rapide : bureau start
+## Quick start: bureau start
 
-`bureau start` orchestre Camofox headless + `bureau serve` en une seule
-commande.
+`bureau start` orchestrates Camofox headless + `bureau serve` in a single
+command.
 
 ```bash
-bureau start                              # Camofox :9377 + serve :8830, avant-plan
-bureau start --detach                     # tout en arrière-plan, exit 0 si healthy
-bureau start bureau-only                  # Camofox supposé up, démarre juste serve
-bureau start --port 9000                  # bureau serve sur :9000
+bureau start                              # Camofox :9377 + serve :8830, foreground
+bureau start --detach                     # everything in background, exit 0 when healthy
+bureau start bureau-only                  # Camofox assumed up, only starts serve
+bureau start --port 9000                  # bureau serve on :9000
 bureau start --camofox-port 9400 --detach
 bureau start --camofox-cmd "camoufox serve --port 9377" --detach
-bureau start --timeout 90                 # délai max 90 s (défaut 60)
+bureau start --timeout 90                 # max wait 90 s (default 60)
 ```
 
-Résolution de la commande Camofox (ordre) : `--camofox-cmd` →
-`$CAMOFOX_SERVE_CMD` → `launchctl start com.agentik.camofox` (macOS). Si rien
+Resolution of the Camofox command (order): `--camofox-cmd` →
+`$CAMOFOX_SERVE_CMD` → `launchctl start sh.bureau.camofox` (macOS — the launchd
+label `sh.bureau.camofox` is a user-configurable default; adapt it to your own
+installed label). If nothing
 n'est résolvable, erreur explicite avec instructions. Idempotent : si Camofox
-est déjà up, ne le respawn pas.
+is already up, it does not respawn it.
 
 Bureau is the **standalone, shipped product** of the browser stack: one daemon
 co-located with a stealth Firefox (Camofox), exposing browser capabilities as
@@ -100,8 +102,8 @@ The MCP surface (26 tools) is reached over JSON-RPC at `POST /mcp` with
     "capture the real request, don't guess" recorder).
 
   **Port coverage today** (each cell = one registry entry; grow via the
-  ADAPTER-SOP, capturing on the platform's authed `*-agentik` chrome-profile
-  session): `action` linkedin + x · `conversation` (inbox read) **linkedin + x +
+  ADAPTER-SOP, capturing on a chrome-profile session saved against the
+  platform's authenticated account): `action` linkedin + x · `conversation` (inbox read) **linkedin + x +
   instagram** · `media` (attachment download) **linkedin + x + instagram +
   facebook + reddit** (one shared tiered-CDN fetch behind all of them —
   `core/media-download.ts`: tier 1 plain CORS, tier 2 credentialed + optional
@@ -136,7 +138,7 @@ curl -s -X POST http://127.0.0.1:8830/mcp -H 'Content-Type: application/json' \
 
 ## Sessions — saved browser identities
 
-A **session** is a named, logged-in identity ("my Agentik X") resolved against a
+A **session** is a named, logged-in identity ("my X demo account") resolved against a
 real Chrome profile's cookies, addressed by name — never a cookie jar or opaque
 "Profile 3". `capture` / `search` / `health` all take `--session <id>`.
 
@@ -244,8 +246,8 @@ b() { node projects/browser/apps/bureau/dist/index.js "$@"; }
 curl -s http://127.0.0.1:9377/health            # camofox up
 curl -s http://127.0.0.1:8830/health            # {"ok":true,"tools":26}
 b session list                                  # saved identities present
-b session show x-agentik                        # status: ✓ logged in
-b health --session x-agentik --handle nasa --platform x   # ✓ OK ~4.5s
+b session show linkedin-demo                       # status: ✓ logged in
+b health --session linkedin-demo --handle nasa --platform x   # ✓ OK ~4.5s
 b workflow list                                 # registered workflows
 ```
 

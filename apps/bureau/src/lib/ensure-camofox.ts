@@ -5,7 +5,7 @@
  * Launch command resolution order:
  *   1. opts.launchCmd
  *   2. $CAMOFOX_SERVE_CMD
- *   3. macOS launchd: `launchctl start com.agentik.camofox`
+ *   3. macOS launchd: `launchctl start sh.bureau.camofox`
  * If none resolves → throws with explicit instructions (no silent magic).
  *
  * `pid` may be `undefined` — when camofox is started via launchctl, launch()
@@ -51,7 +51,7 @@ function resolveCmd(
   const envCmd = process.env.CAMOFOX_SERVE_CMD
   if (envCmd) return { file: "/bin/sh", args: ["-c", envCmd] }
   if (platform() === "darwin")
-    return { file: "launchctl", args: ["start", "com.agentik.camofox"] }
+    return { file: "launchctl", args: ["start", "sh.bureau.camofox"] }
   return null
 }
 

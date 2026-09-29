@@ -54,7 +54,7 @@ useful data while an in-page API fetch returns the full structured truth.
    recover — switch to the **camofox-stealth** MCP on agentproto:
    `mcp_imported_call alias="camofox-stealth" toolName="scrape"` (HTTP-first,
    auto-escalates) or `stealth_snapshot`. Needs the camofox server on :9377
-   (launchd `com.agentik.camofox`). See
+   (launchd label `sh.bureau.camofox`, a user-configurable default). See
    `projects/browser/apps/stealth-mcp/README.md`.
 
 ## Reference (read what you need)

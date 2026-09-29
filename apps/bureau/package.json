@@ -81,7 +81,7 @@
   "optionalDependencies": {
     "qrcode-terminal": "^0.12.0"
   },
-  "author": "Agentik",
+  "author": "Bureau contributors",
   "homepage": "https://github.com/agentproto/bureau#readme",
   "bugs": {
     "url": "https://github.com/agentproto/bureau/issues"

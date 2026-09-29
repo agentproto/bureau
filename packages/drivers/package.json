@@ -43,7 +43,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "Agentik",
+  "author": "Bureau contributors",
   "homepage": "https://github.com/agentproto/bureau#readme",
   "bugs": {
     "url": "https://github.com/agentproto/bureau/issues"

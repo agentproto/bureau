@@ -6,9 +6,11 @@ Agent skills for Bureau, in the standard `SKILL.md` format.
 
 | Skill | Ships | Notes |
 | --- | --- | --- |
-| `bureau` | yes | Drives Bureau itself: the daemon, sessions, capture, workflows. Needs a pass before launch: it names a launchd label and example profile names from the maintainer's setup, and part of it is in French. |
-| `local-browser` | decide | Drives the user's real Chrome through the agentproto daemon and tunnel. Useful only with that host stack; ship it only if the stack is public and documented. |
+| `bureau` | yes | Drives Bureau itself: the daemon, sessions, capture, workflows. |
 | `browser` | decide | The foundation skill for "do X in a browser as me". Refers to a host app, a tunnel and a daemon that are not part of this repository, and to a launchd label. Ship after those references are made generic, or keep it private. |
+
+Not shipped: `local-browser` (decided: not shipped — it depends on a
+non-public host stack).
 
 ## What stays private
 

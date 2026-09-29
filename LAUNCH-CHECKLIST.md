@@ -25,7 +25,7 @@ repository goes public** (it is internal; it names the local dev setup).
 - [ ] Make the repository public; first push: `git remote add origin git@github.com:agentproto/bureau.git && git push -u origin main`.
 - [ ] Run gitleaks (and trufflehog) on the real history before the first push: `gitleaks detect --source . --config .gitleaks.toml --redact`. Neither tool was available when this checklist was written, so this is unverified.
 - [ ] Run `export/scan.sh` on a `git archive HEAD` export of the release commit one more time.
-- [ ] Known leftover: the default launchd label for Camofox (`com.agentik.camofox` in `apps/bureau/src/lib/browser-registry.ts` and `ensure-camofox.ts`, also named in two skills). Decide on a neutral default (for example `sh.bureau.camofox`) and migrate the local launchd job together.
+- [x] Known leftover: the default launchd label for Camofox (`com.agentik.camofox` in `apps/bureau/src/lib/browser-registry.ts` and `ensure-camofox.ts`, also named in two skills). RESOLVED: both sources now default to the neutral `sh.bureau.camofox` and the skills name it as a user-configurable default. Remaining: migrate the local launchd job on the maintainer machine.
 
 ## Downstream
 

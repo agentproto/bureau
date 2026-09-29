@@ -230,7 +230,7 @@ export function createActEntry(
       z.object({
         session: z
           .string()
-          .describe("Saved logged-in identity to act AS (e.g. x-agentik)."),
+          .describe("Saved logged-in identity to act AS (e.g. x-demo)."),
         action: z
           .enum([
             "goto",
@@ -410,7 +410,7 @@ const SESSION_AWARE_TOOL_NAMES = new Set([
 const SESSION_JSON_SCHEMA = {
   type: "string",
   description:
-    "Saved logged-in identity to drive (e.g. linkedin-agentik). When set, " +
+    "Saved logged-in identity to drive (e.g. linkedin-demo). When set, " +
     "runs against that session's own authenticated tab (same pooled tab as " +
     "browser_act) instead of the anonymous control tab.",
 }

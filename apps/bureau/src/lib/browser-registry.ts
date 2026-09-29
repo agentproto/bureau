@@ -114,7 +114,7 @@ export interface ProviderCheckEnv {
   launchdLoaded: (label: string) => boolean
 }
 
-const CAMOFOX_LAUNCHD_LABEL = "com.agentik.camofox"
+const CAMOFOX_LAUNCHD_LABEL = "sh.bureau.camofox"
 
 /** Is this provider usable on this machine: binary, launchd label or launch command. */
 export async function checkProvider(provider: BrowserProvider, env: ProviderCheckEnv): Promise<ProviderCheck> {
