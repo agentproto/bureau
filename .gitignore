@@ -16,3 +16,4 @@ sessions/
 !/export/scan.sh
 !/export/scan-patterns.txt
 !/export/scan-selftest.sh
+LAUNCH-CHECKLIST.md
