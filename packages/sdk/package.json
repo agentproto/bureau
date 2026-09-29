@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "url": "git+https://github.com/agentproto/bureau.git",
     "directory": "packages/sdk"
   },
   "description": "Typed client for a Bureau capability server: sessions, tabs and live snapshots over an injected transport",
@@ -57,8 +57,8 @@
     "access": "public"
   },
   "author": "Agentik",
-  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "homepage": "https://github.com/agentproto/bureau#readme",
   "bugs": {
-    "url": "https://github.com/bureau-sh/bureau/issues"
+    "url": "https://github.com/agentproto/bureau/issues"
   }
 }

@@ -25,7 +25,7 @@ when a launch command is configured, or reuses one that already answers on
 **1. Install.** Once the packages are published:
 
 ```bash
-npm install -g bureau-sh
+npm install -g @agentproto/bureau
 ```
 
 From a checkout instead: `pnpm install && pnpm build`, then use
@@ -104,7 +104,7 @@ still change before it is accepted. Draft PR:
 
 | Path | Package | What it is |
 | --- | --- | --- |
-| `apps/bureau` | `bureau-sh` | `bureau` CLI and server, plugin host, `bureau-sh/sdk` and `bureau-sh/plugin` |
+| `apps/bureau` | `@agentproto/bureau` | `bureau` CLI and server, plugin host, `@agentproto/bureau/sdk` and `@agentproto/bureau/plugin` |
 | `packages/core` | `@agentproto/bureau-core` | Driver port, sessions, recordings, notifier, page-eval contracts |
 | `packages/drivers` | `@agentproto/bureau-drivers` | Camofox and external-MCP browser driver backends |
 | `packages/mcp` | `@agentproto/bureau-mcp` | The browser MCP tool catalogue |

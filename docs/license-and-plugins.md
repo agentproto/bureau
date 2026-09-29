@@ -10,7 +10,7 @@ each hook; none of them can block the core.
 (repeatable) or `BUREAU_PLUGINS=a,b`. A plugin default-exports a `BureauPlugin`:
 
 ```ts
-import type { BureauPlugin } from "bureau-sh/plugin"
+import type { BureauPlugin } from "@agentproto/bureau/plugin"
 
 export default {
   name: "my-plugin",
@@ -25,7 +25,7 @@ tool name that is registered twice is an error. Other fields: `browsers` and
 `toolCapabilities` ([providers.md](providers.md)), `sessionSources`, `authorize`
 ([pairing.md](pairing.md)), `usage`, `license`.
 
-`bureau-sh/sdk` exports the building blocks a plugin needs: the entry helpers,
+`@agentproto/bureau/sdk` exports the building blocks a plugin needs: the entry helpers,
 the workflow and recipe registries, the session-source and notifier factories,
 and `registerPlatformKit` for per-site knowledge. With no kit registered, generic
 `--url` flows keep working and no site is special-cased. The workflow engine

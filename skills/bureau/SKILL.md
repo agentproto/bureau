@@ -47,9 +47,9 @@ workstation. It is its own appliance with no dependency on any hosting platform.
 
 ## Layout
 
-- **App**: `apps/bureau` — the CLI + serve entrypoint (`bureau-sh`, `bin: bureau`).
+- **App**: `apps/bureau` — the CLI + serve entrypoint (`@agentproto/bureau`, `bin: bureau`).
 - **Invoke**: `node apps/bureau/dist/index.js <cmd>` (built output), or
-  `pnpm --filter bureau-sh dev <cmd>` (tsx watch), or the global `bureau` bin if linked.
+  `pnpm --filter @agentproto/bureau dev <cmd>` (tsx watch), or the global `bureau` bin if linked.
 - **State**: `~/.agentproto/bureau/` — `sessions/` (saved identities, the cookie
   store), `runtime.json` (descriptor when hosted).
   Secrets (platform passwords, API tokens) live in the **OS Keychain**, never
@@ -257,5 +257,5 @@ b workflow list                                 # registered workflows
   and may need a manual launch — see `lib/camofox-headful.ts`.
 - **Keychain creds never via the LLM** — `creds set` uses a hidden prompt or a
   named env var; don't echo passwords through argv or a tool.
-- **Built dist can be stale** — `pnpm --filter bureau-sh build` (tsup)
+- **Built dist can be stale** — `pnpm --filter @agentproto/bureau build` (tsup)
   after editing, or use `dev` (tsx watch) for live iteration.

@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "url": "git+https://github.com/agentproto/bureau.git",
     "directory": "packages/router"
   },
   "description": "Tiered scrape router with signal-driven auto-escalation (HTTP, chromium, camofox, agent)",
@@ -30,8 +30,8 @@
     "access": "public"
   },
   "author": "Agentik",
-  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "homepage": "https://github.com/agentproto/bureau#readme",
   "bugs": {
-    "url": "https://github.com/bureau-sh/bureau/issues"
+    "url": "https://github.com/agentproto/bureau/issues"
   }
 }

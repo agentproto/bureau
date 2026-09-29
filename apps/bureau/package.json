@@ -1,11 +1,11 @@
 {
-  "name": "bureau-sh",
+  "name": "@agentproto/bureau",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "url": "git+https://github.com/agentproto/bureau.git",
     "directory": "apps/bureau"
   },
   "description": "Bureau: an installable browser capability server. Drives a real (stealth) browser and exposes its capabilities as MCP tools over HTTP.",
@@ -82,8 +82,8 @@
     "qrcode-terminal": "^0.12.0"
   },
   "author": "Agentik",
-  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "homepage": "https://github.com/agentproto/bureau#readme",
   "bugs": {
-    "url": "https://github.com/bureau-sh/bureau/issues"
+    "url": "https://github.com/agentproto/bureau/issues"
   }
 }

@@ -5,7 +5,7 @@ repository goes public** (it is internal; it names the local dev setup).
 
 ## Decisions and identity
 
-- [ ] Confirm the org and repo name `bureau-sh/bureau` (used in every package.json `repository`, README and CI). Change: search and replace, then re-run `pnpm scan`.
+- [ ] Confirm the org and repo name `agentproto/bureau` (used in every package.json `repository`, README and CI). Change: search and replace, then re-run `pnpm scan`.
 - [ ] Legal entity name for the license holder. `LICENSE` and every package `author` currently say `Agentik` as a placeholder.
 - [ ] Security contact address. `SECURITY.md` has the placeholder `security@bureau.example`; set a real, monitored address and mailbox.
 - [ ] AIP number for the BROWSER profile once assigned (README and docs say "provisional AIP-63", draft PR `agentproto/agentproto#53`). Update wording when accepted.
@@ -18,11 +18,11 @@ repository goes public** (it is internal; it names the local dev setup).
 
 ## Publish
 
-- [ ] Reserve the npm names: unscoped `bureau-sh` and the `@agentproto` scope packages `bureau-core`, `bureau-drivers`, `bureau-mcp`, `bureau-router`, `bureau-purify`, `bureau-sdk`.
+- [ ] Reserve the npm names: unscoped `@agentproto/bureau` and the `@agentproto` scope packages `bureau-core`, `bureau-drivers`, `bureau-mcp`, `bureau-router`, `bureau-purify`, `bureau-sdk`.
 - [ ] Add the `NPM_TOKEN` repo secret (or configure trusted publishing) and enable branch protection on `main`.
 - [ ] Install `@changesets/cli` (`pnpm install`); the initial changesets bump to 0.1.1. For the very first release publish 0.1.0 as is: `pnpm build && pnpm changeset publish` from a clean checkout, then let the changesets flow take over.
 - [ ] Flip `PUBLISH_DRY_RUN` to `"false"` in `.github/workflows/publish.yml` in a reviewed commit (there is intentionally no manual switch).
-- [ ] Make the repository public; first push: `git remote add origin git@github.com:bureau-sh/bureau.git && git push -u origin main`.
+- [ ] Make the repository public; first push: `git remote add origin git@github.com:agentproto/bureau.git && git push -u origin main`.
 - [ ] Run gitleaks (and trufflehog) on the real history before the first push: `gitleaks detect --source . --config .gitleaks.toml --redact`. Neither tool was available when this checklist was written, so this is unverified.
 - [ ] Run `export/scan.sh` on a `git archive HEAD` export of the release commit one more time.
 - [ ] Known leftover: the default launchd label for Camofox (`com.agentik.camofox` in `apps/bureau/src/lib/browser-registry.ts` and `ensure-camofox.ts`, also named in two skills). Decide on a neutral default (for example `sh.bureau.camofox`) and migrate the local launchd job together.

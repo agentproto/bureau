@@ -43,7 +43,7 @@ A plugin default-exports a `BureauPlugin` with `browsers`. Load it with
 
 ```ts
 import { defineBrowser } from "@agentproto/driver-browser"
-import type { BureauPlugin } from "bureau-sh/plugin"
+import type { BureauPlugin } from "@agentproto/bureau/plugin"
 
 const acme = defineBrowser({
   id: "acme-browser",

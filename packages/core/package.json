@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "url": "git+https://github.com/agentproto/bureau.git",
     "directory": "packages/core"
   },
   "description": "Bureau core: browser driver port, sessions, recordings, notifier and page-eval contracts",
@@ -69,8 +69,8 @@
     "access": "public"
   },
   "author": "Agentik",
-  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "homepage": "https://github.com/agentproto/bureau#readme",
   "bugs": {
-    "url": "https://github.com/bureau-sh/bureau/issues"
+    "url": "https://github.com/agentproto/bureau/issues"
   }
 }

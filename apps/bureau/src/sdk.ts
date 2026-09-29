@@ -1,6 +1,6 @@
 /**
  * Public plugin SDK: everything a plugin (e.g. a plugin package)
- * needs from core, behind one import path (`bureau-sh/sdk`) so plugins
+ * needs from core, behind one import path (`@agentproto/bureau/sdk`) so plugins
  * never reach into core's internal file layout.
  *
  * Module state (the recipe registry, workflow hooks, session sources) lives in

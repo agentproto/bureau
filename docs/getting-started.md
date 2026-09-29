@@ -10,7 +10,7 @@
 ## Install
 
 ```bash
-npm install -g bureau-sh        # once published
+npm install -g @agentproto/bureau        # once published
 # or from a checkout:
 pnpm install && pnpm build
 node apps/bureau/dist/index.js start
