@@ -1,298 +1,135 @@
 # Bureau
 
-Bureau is an installable browser capability server. It drives a real (stealth)
-browser and exposes what it can do as MCP tools over HTTP, so an agent can
-navigate, capture, evaluate and download through a browser that holds real,
-saved identities.
+Bureau is an installable browser capability server. It drives a real browser
+(stealth Firefox by default, or Chrome or Chromium) and exposes what it can do
+as MCP tools over HTTP, so an agent can navigate, evaluate, capture and
+download through a browser that holds saved identities. Every client is a
+paired device: pairing is the only way in, and each device only gets the
+sessions and domains you granted it.
 
 ```
-agent ──MCP over HTTP :8830──▶ bureau serve ──▶ Camofox (stealth Firefox) :9377
+agent (MCP client) --HTTP :8830, device bearer--> bureau serve --REST--> Camofox (stealth Firefox) :9377
+                                                       |
+                                                       +-- supervises Chrome / Chromium / any registered browser
 ```
 
-This repository is the open core: the server and CLI, the plugin seam, the
-driver and router libraries, the typed client SDK and the agent skill pack.
-Site-specific recipes (per-platform login forms, account switching, capture
-adapters) are not part of core. They plug in through the platform kit and the
-plugin seam described below.
+Status: v1, pre-release. See [Known limits in v1](#known-limits-in-v1).
+
+## Quickstart (5 minutes)
+
+Requirements: Node.js 22.13 or newer. The default browser is Camofox, a
+separate server (the `camofox-browser` project); Bureau launches it for you
+when a launch command is configured, or reuses one that already answers on
+`CAMOFOX_URL` (default `http://127.0.0.1:9377`).
+
+**1. Install.** Once the packages are published:
+
+```bash
+npm install -g bureau-sh
+```
+
+From a checkout instead: `pnpm install && pnpm build`, then use
+`node apps/bureau/dist/index.js` wherever this page says `bureau`.
+
+**2. Start the server and the browser.**
+
+```bash
+bureau start                    # camofox by default; add --browser chrome --headless for Chrome
+bureau doctor                   # checklist with a fix hint per failure
+```
+
+Bureau listens on `127.0.0.1:8830`. `GET /health` is open; everything else
+needs a paired device.
+
+**3. Pair your MCP client.** This mints a local device (no QR) and writes its
+bearer into the client config. It prints the config diff with the bearer
+redacted, and running it again changes nothing:
+
+```bash
+bureau install-mcp                    # Claude Code (~/.claude.json)
+bureau install-mcp --client cursor    # Cursor (~/.cursor/mcp.json)
+```
+
+Restart the client. For a phone or another machine use `bureau pair` (QR and
+URL); see [docs/pairing.md](docs/pairing.md).
+
+**4. First call.** In the client, ask the agent to call `browser_navigate` with
+a URL, then `browser_evaluate` with `document.title`. Or script it with the SDK:
+[examples/navigate.mjs](examples/navigate.mjs).
+
+`scripts/quickstart-check.mjs` runs steps 2 to 4 for real on a fresh temp HOME
+(with a fake Camofox) and writes [docs/quickstart-run.txt](docs/quickstart-run.txt).
+
+## Providers
+
+A browser provider says how to launch a browser and which capabilities it has
+(`cdp`, `downloads`, `stealth`, and so on). Tools that need a capability the
+active browser lacks answer with a typed `browser:unsupported` error naming the
+capability and the browsers that have it.
+
+| Provider | Use | Notes |
+| --- | --- | --- |
+| `camofox` (alias `camoufox`) | `bureau start` | Default. Stealth Firefox behind a REST server. |
+| `chrome` | `bureau start --browser chrome [--headless]` | A fresh dedicated profile. Never your own Chrome profile. |
+| `chromium` | `bureau start --browser chromium --profile work` | Playwright Chromium, dedicated profile. |
+| any id | `bureau start --browser <id>` | Registered by a plugin (`BureauPlugin.browsers`). |
+
+Registering your own provider through the plugin seam, with a working sketch, is
+in [docs/providers.md](docs/providers.md).
+
+## Spec
+
+The provider contract is the BROWSER profile of the AIP family (`defineBrowser`,
+provisional number AIP-63). It is a **draft**: the number and field names can
+still change before it is accepted. Draft PR:
+<https://github.com/agentproto/agentproto/pull/53>.
+
+## Examples
+
+- [examples/mcp-client.json](examples/mcp-client.json): the MCP client entry
+  `bureau install-mcp` writes, with a placeholder bearer.
+- [examples/navigate.mjs](examples/navigate.mjs): a scripted `browser_navigate`
+  and `browser_evaluate` with the SDK and the device bearer.
+
+## Documentation
+
+- [Getting started](docs/getting-started.md): install, start, layout, health, doctor
+- [Pairing](docs/pairing.md): local and remote devices, revoking
+- [Providers](docs/providers.md): choosing a browser, capability errors, registering one
+- [Sessions and grants](docs/sessions-and-grants.md): saved identities, consent, leases, live view
+- [License and plugins](docs/license-and-plugins.md): plugin API, usage meter, license check
+- [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), [skills/README.md](skills/README.md)
 
 ## Layout
 
-| Path                | Package                        | What it is                                                   |
-| ------------------- | ------------------------------ | ------------------------------------------------------------ |
-| `apps/bureau`       | `bureau-sh`                    | `bureau` CLI and `serve` entrypoint, plugin host, `bureau-sh/sdk` |
-| `packages/core`     | `@agentproto/bureau-core`      | Driver port, sessions, recordings, notifier, page-eval contracts |
-| `packages/drivers`  | `@agentproto/bureau-drivers`   | Camofox and external-MCP browser driver backends             |
-| `packages/mcp`      | `@agentproto/bureau-mcp`       | The browser MCP tool catalogue                               |
-| `packages/router`   | `@agentproto/bureau-router`    | Tiered scrape router (HTTP, chromium, camofox, agent)        |
-| `packages/purify`   | `@agentproto/bureau-purify`    | HTML to clean markdown                                       |
-| `packages/sdk`      | `@agentproto/bureau-sdk`       | Typed client and React hooks for a Bureau server             |
-| `skills/`           |                                | Agent skills: `bureau`, `browser`, `local-browser`           |
+| Path | Package | What it is |
+| --- | --- | --- |
+| `apps/bureau` | `bureau-sh` | `bureau` CLI and server, plugin host, `bureau-sh/sdk` and `bureau-sh/plugin` |
+| `packages/core` | `@agentproto/bureau-core` | Driver port, sessions, recordings, notifier, page-eval contracts |
+| `packages/drivers` | `@agentproto/bureau-drivers` | Camofox and external-MCP browser driver backends |
+| `packages/mcp` | `@agentproto/bureau-mcp` | The browser MCP tool catalogue |
+| `packages/router` | `@agentproto/bureau-router` | Tiered scrape router (HTTP, chromium, camofox, agent) |
+| `packages/purify` | `@agentproto/bureau-purify` | HTML to clean markdown |
+| `packages/sdk` | `@agentproto/bureau-sdk` | Typed client and React hooks for a Bureau server |
+| `skills/` | | Agent skills for the open pack |
 
-Saved-session modelling (the cookie jar, profile bridging and consent grants)
-lives in `@agentproto/browser-profiles`, which this repository depends on.
+This is the open core. Site-specific recipes and hosted services plug in through
+the plugin seam and are not part of this repository.
 
-## Requirements
+## Known limits in v1
 
-- Node.js 22.13 or newer and pnpm.
-- A browser: Camofox (default, reachable through `CAMOFOX_URL`, default
-  `http://127.0.0.1:9377`), Chrome or Chromium. `bureau start` launches it for
-  you. Any other browser a plugin registers works too (see
-  [Choosing a browser](#choosing-a-browser)).
-- macOS for the default credential store, which uses the `security` CLI.
-
-## Quick start
-
-```bash
-pnpm install
-pnpm build
-node apps/bureau/dist/index.js start        # Camofox + server together
-node apps/bureau/dist/index.js session scan # list Chrome profiles that look like identities
-```
-
-`bureau session list | show <id> | rm <id>` manage what is saved under
-`~/.agentproto/bureau/sessions` (override with `BUREAU_SESSIONS_DIR`).
-
-## Choosing a browser
-
-```bash
-bureau start                                   # camofox (default)
-bureau start --browser chrome --headless       # a fresh dedicated Chrome profile
-bureau start --browser chromium --profile work # Playwright Chromium, dedicated profile "work"
-bureau start --browser acme-browser            # any id a plugin registers
-bureau start --detach                          # background; writes <BUREAU_HOME>/bureau-run.json
-bureau stop                                    # stops only what bureau start began
-```
-
-Flags: `--browser camofox|chrome|chromium|<id>` (`camoufox` is accepted, and the
-old positional `bureau start camofox` still works; `BUREAU_BROWSER` sets the
-default), `--headless | --headed`, `--profile <name>`, `--port` (Bureau),
-`--browser-port`, `--camofox-cmd`, `--timeout <seconds>`, `--detach`.
-
-- **Idempotent.** A Bureau or browser that already answers `/health` is reused,
-  never respawned. `bureau start` with a different `--browser` than the running
-  one refuses and points at `bureau stop`.
-- **`bureau stop`** signals only a Bureau that wrote the state file and answers
-  `/health` on its recorded port. A browser Bureau merely found running is left
-  running.
-- **Chrome and Chromium never touch your Chrome profile.** `--profile` names a
-  fresh dedicated directory under the Bureau home; the default Chrome
-  user-data-dir and the profile name `Default` are refused. Using a whole
-  profile needs `--full-profile <grant-id>` with an active recorded grant, and
-  works only when Bureau's own pairing is in use.
-- **Third-party browsers** register through the plugin seam
-  (`BureauPlugin.browsers`, kit providers) and are selected by id. Plugins may
-  also declare which of their tools need which capability
-  (`BureauPlugin.toolCapabilities`).
-
-Tool execution limitation: the tool catalogue still runs through the Camofox
-driver. The browser you choose drives launch, supervision, `/health` and
-capability gating; it does not yet re-target the tools themselves.
-
-### Capability errors
-
-Each browser declares capabilities. Tools that need one the active browser lacks
-answer with a typed error (`code: "browser:unsupported"`) that names the
-capability, the active browser and the browsers that have it, for example:
-`"browser_cdp_send" needs the "cdp" capability, which the active browser
-"camofox" does not have. Restart Bureau with one that does: bureau start --browser chrome | chromium.`
-One table (`CAPABILITY_TOOL_TABLE` in `lib/capability-gate.ts`) maps capability
-to tools: `cdp` (`browser_list_requests`, `browser_get_request_body`,
-`browser_cdp_send`), `downloads` (`browser_download`), `stealth` (`scrape`,
-`browser_act`). A test walks the table against every provider.
-
-### Health
-
-`GET /health` stays open and keeps `ok` and `tools`. It adds:
-
-| field | meaning |
-| --- | --- |
-| `browser` | id of the active browser |
-| `state` | `starting`, `healthy`, `degraded`, `crash-looping` or `stopped` |
-| `restarts` | relaunches since Bureau started |
-| `wasAlreadyRunning` | Bureau reused a browser it did not start |
-| `since` | ISO time the current state began |
-| `licenseRefusals` | only when a plugin was refused by its license: `[{plugin, reason}]` |
-
-Bureau's own `/health` always answers HTTP 200, so a crashing browser never
-takes Bureau down; read `state`. Only the Camofox server itself answers 503 when
-it is launching or crash-looping. Retries stop once the supervisor reports
-`crash-looping` (3 launch failures in 5 minutes by default). Run `bureau start`
-again to reset it; that restarts the Bureau it started. `--no-browser` reports
-`stopped` (nothing is managed).
-
-## Doctor
-
-```bash
-bureau doctor [--browser ID] [--profile NAME] [--keychain] [--json]
-```
-
-Prints a checklist with a fix hint per failure and exits 1 if any check fails:
-browser availability, Camofox reachability and its `/health` mapping, Chrome
-`Local State`, Full Disk Access (an `EPERM` names the binary that needs it), the
-pairing store and consent ledger being mode 0600, the ledger's hash chain
-verifying, and how `authorize` is configured. `--keychain` also probes the
-macOS Keychain and may show a prompt.
-
-## Consent grants
-
-```bash
-bureau session import --from chrome --domains github.com,x.com --yes
-bureau session import --from chrome --domains github.com     # asks per domain
-bureau session list                                          # saved sessions, then grants
-bureau session revoke github.com                             # or a grant id
-```
-
-`import` grants Bureau the cookies of the named domains only. Without `--yes` it
-asks per domain on a terminal; without a terminal it fails unless both
-`--domains` and `--yes` are given. Wildcards and `all` are rejected. `list`
-shows domains, granted-at and the device fingerprint, never cookie values.
-`revoke` deletes the derived cookie material and appends a row to the consent
-ledger. The agent (MCP) surface cannot add a domain or change the profile; such
-attempts are refused and recorded as `deny` rows.
-
-## Plugins
-
-`bureau serve` loads plugins named by `--plugin <path|pkg>` (repeatable) or
-`BUREAU_PLUGINS=a,b`. A plugin is a module that default-exports a
-`BureauPlugin`:
-
-```ts
-import type { BureauPlugin } from "bureau-sh/plugin"
-
-export default {
-  name: "my-plugin",
-  entries: ctx => [/* MCP tool entries */],
-  httpRoutes: [/* extra HTTP routes */],
-  commands: {/* extra CLI subcommands */},
-} satisfies BureauPlugin
-```
-
-`bureau-sh/sdk` exports the building blocks a plugin needs: the entry helpers,
-the workflow and recipe registries, the session-source and notifier factories,
-and `registerPlatformKit` for per-site knowledge. With no kit registered,
-generic `--url` flows keep working and no site is special-cased.
-
-## Pairing (the only auth)
-
-`/mcp` accepts one credential: a device bearer minted by pairing (AIP-59).
-There is no static token, no shared secret env var and no password. `/health`
-stays open and returns `{"ok":true,"tools":N}` plus the browser fields below. A missing or invalid bearer gets
-`401` with `WWW-Authenticate: Bearer realm="bureau"` and a body that says
-nothing about why. The Host and Origin guard stays on in front of both.
-
-State lives in `~/.agentproto/bureau` (override with `BUREAU_HOME`):
-`pairings.json` (mode 0600), `identity.json`, `grants.json`, and a control
-socket the CLI uses to talk to the running server.
-
-### Local: your own MCP host
-
-```bash
-bureau install-mcp                # claude (default)
-bureau install-mcp --client cursor
-```
-
-This mints a local device (no QR) and writes its bearer into the host's MCP
-config. It is idempotent: re-running replaces its own entry, revokes the
-superseded device and never duplicates. The bearer is never printed.
-
-### Remote: another machine or phone
-
-```bash
-bureau pair                       # prints a QR and a URL (server must be running)
-bureau pair --no-qr --ttl 300
-bureau devices list
-bureau devices revoke <id|name>   # takes effect on the very next request
-```
-
-The peer connects over an end-to-end encrypted rendezvous. The paired channel
-is forwarded to your local `/mcp` and `/health` only (any other path is `403`),
-with a credential injected by Bureau. The peer's own `Authorization` header
-never reaches the local server.
-
-**Hosted rendezvous.** Unless you pass `--rendezvous <url>` (a rendezvous you
-run yourself), pairing uses the hosted default. Traffic is end-to-end
-encrypted, but the operator of a hosted rendezvous can see connection metadata
-such as when and how often devices connect. `bureau pair` prints this warning
-every time it applies.
-
-### Per-device grants
-
-Consent grants (browser-profiles) are keyed by the paired device fingerprint.
-A session that has grants is usable only by devices those grants serve, and for
-the domains they cover: device A granted `github.com` can use the session
-there, device B cannot. A grant with no device serves every device.
-
-### Studio flavour
-
-A plugin may supply its own `authorize` (`BureauPlugin.authorize`), which
-replaces pairing. The studio flavour does this with the exported
-`allowLoopback` to keep its loopback-open default. Only one plugin may do so.
-
-## Business hooks
-
-Four seams let a hosted or paid product sit on top of the open core. The core
-ships the port and a safe default for each; a plugin supplies the rest. None of
-them can block the core: with no plugin, or a plugin that asks for nothing, they
-are inert.
-
-### Usage meter
-
-A `UsageMeter` receives one `start`, then a `heartbeat` every minute, then one
-`stop` for the browser instance and for each live session. An event holds only
-ids, the browser id, a duration and the paired device fingerprint (never a URL,
-cookie or token). The default is a noop.
-
-- `--usage-file <path>` (or `BUREAU_USAGE_FILE`) turns on the JSONL sink: append
-  only, file `0600`, directory `0700`.
-- `--usage-heartbeat-ms <n>` (or `BUREAU_USAGE_HEARTBEAT_MS`) changes the
-  heartbeat; default 60000.
-- A plugin can set `usage: { record, browser }` to meter its own way. It wins
-  over the file sink. At most one plugin may set it.
-
-### Session lease
-
-`session_lease` lends only the granted domains' session cookies, for one run
-(default 300 s, at most 900 s), to a paired device. It needs a human approval,
-made in a terminal: `bureau session lease-approve --session ID --device FP
---domains a.com,b.com`. There is no `--yes`. The approval is an ed25519 signed
-record (AIP-7 shape: request, payload, signature; `signerKind: user`,
-`click_through`) signed by a local approver key in the Bureau home. A lease is
-refused for a domain the approval or the device's active grant does not cover, a
-replayed or expired approval, a bad signature, or a call with no approval id.
-`session_lease_revoke` ends a lease; the next `session_lease` call with its
-`leaseId` is refused. Each issue, use, revoke, expiry and deny is a row in a
-hash-chained `lease-ledger.jsonl` (ids, domains, counts, a fixed code; never a
-cookie value).
-
-Receiver contract: keep the returned cookies in memory only, never write them to
-disk, a log or a cache; call `session_lease` with the `leaseId` before each use;
-drop them on any refusal, at `expiresAt`, and after a revoke. Bureau stores no
-cookie in the lease record and re-checks the grant on every use, so revoking the
-consent grant also ends the lease. The tools exist only where a consent host
-does (the pairing flavour). Under a plugin `authorize` such as the studio's
-`allowLoopback` there is no consent host, so no lease tools.
-
-### Pro license
-
-A plugin may set `license`, a check run once when it loads. `createLicenseCheck`
-verifies a compact token: `<header>.<payload>.<signature>`, base64url, header
-`{"alg":"EdDSA","typ":"bureau-license"}`, payload `{sub, exp, features[],
-tier?}`, signature ed25519 over `<header>.<payload>`. The public key is the
-plugin's. An unsigned, expired or tampered token refuses that plugin with a
-message that never echoes the token; the refusal is logged and listed in
-`/health` as `licenseRefusals`, and the core keeps serving. Bureau ships no
-signer.
-
-### Live view
-
-`GET /live/<session>` streams screenshots of an already open session as MJPEG
-(`multipart/x-mixed-replace`). MJPEG shows in a plain `<img>`, sends raw JPEG
-bytes (SSE would base64 each frame) and is ordinary chunked HTTP, so the pairing
-tunnel forwards it. It uses the same pairing `authorize` as `/mcp` (401 with no
-detail) and the per-device grant check (403). It is read only: every method but
-GET is 405, it never opens a session (404), frames are at least 250 ms apart, a
-device gets at most 3 streams, and a stream ends after 10 minutes or when the
-grant is revoked. Takeover (input from the viewer): not in v1.
+- **Tools still run through the Camofox driver.** `--browser chrome|chromium`
+  launches, supervises and capability-gates, but the tool catalogue is not
+  re-targeted to that browser yet. The quickstart therefore needs Camofox.
+- **`download` has no driver-port verb yet.** `browser_download` is gated by the
+  `downloads` capability but has no port-level implementation.
+- **No encryption at rest.** Grants, the consent ledger and the pairing store are
+  plain files with modes 0600 and 0700. Encrypted storage is planned for v1.1.
+- **Live view is read only.** No takeover (input from the viewer) in v1.
+- **Real-device rendezvous is not exercised.** The remote pairing path is proven
+  over an in-memory rendezvous fake, not against the hosted rendezvous or a
+  second machine.
+- **macOS only for the default credential store** (`security` CLI).
 
 ## Development
 
@@ -304,8 +141,7 @@ pnpm test         # vitest, offline (fakes only)
 pnpm scan         # release scan: paths, secrets, private names
 ```
 
-Tests never touch a live browser. `pnpm scan` is fail-closed and must exit 0
-before anything is published.
+Tests never touch a live browser. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -5,10 +5,10 @@
  * Fetching (HTTP / Chromium / Camofox / agent) and purifying (boilerplate
  * stripping → main article as Markdown) are separate concerns: the scrape
  * router returns HTML; this turns that HTML into `{ title, markdown }`.
- * Keeping it a standalone package lets the browser project stay pure —
- * Defuddle is a plain dependency, so nothing here couples to an app
- * integration layer. The agentik `integration-content` package re-exports
- * this as its single source of truth instead of wrapping Defuddle twice.
+ * Keeping it a standalone package lets Bureau stay pure: Defuddle is a plain
+ * dependency, so nothing here couples to an app integration layer. Host apps
+ * can re-export this as their single source of truth instead of wrapping
+ * Defuddle twice.
  *
  * Deterministic and dependency-light: no LLM, no network, no DOM globals
  * beyond what `defuddle/node` provides for itself.

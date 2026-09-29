@@ -1,9 +1,11 @@
 /**
- * `bureau install-mcp` — give a local MCP host (Claude Code, Cursor) its own
+ * `bureau install-mcp`: give a local MCP host (Claude Code, Cursor) its own
  * paired device. Mints a local device (no QR, no rendezvous), writes the bearer
- * into the host's MCP config, and on a re-run replaces this command's previous
- * entry and revokes the device that entry held. The bearer goes into the config
- * file (mode 0600) and nowhere else: it is never printed or logged.
+ * into the host's MCP config and prints the config diff with the bearer redacted.
+ * A re-run that finds a still-valid entry changes nothing; otherwise it replaces
+ * this command's previous entry and revokes the device that entry held. The
+ * bearer goes into the config file (mode 0600) and nowhere else: it is never
+ * printed or logged.
  *
  *   bureau install-mcp [--client claude|cursor] [--config <path>] [--url <mcp-url>]
  *                      [--name <server-key>] [--device <device-name>]
@@ -43,6 +45,9 @@ export interface InstallMcpResult {
   replaced: boolean
   /** Fingerprint of the device the previous entry held and that was revoked. */
   revokedFingerprint?: string
+  /** The whole host config before and after, for the printed diff. Contains the raw bearer: redact before showing. */
+  configBefore: Record<string, unknown>
+  configAfter: Record<string, unknown>
 }
 
 type Json = Record<string, unknown>
@@ -101,8 +106,9 @@ export async function installMcp(opts: InstallMcpOptions): Promise<InstallMcpRes
       ? { type: "http", url: opts.url, headers: { Authorization: authorization } }
       : { url: opts.url, headers: { Authorization: authorization } }
 
+  const configAfter = { ...config, mcpServers: servers }
   try {
-    await writeConfig(configPath, { ...config, mcpServers: servers })
+    await writeConfig(configPath, configAfter)
   } catch (e) {
     await opts.registry.revoke(device.fingerprint).catch(() => false)
     throw e
@@ -117,11 +123,73 @@ export async function installMcp(opts: InstallMcpOptions): Promise<InstallMcpRes
     fingerprint: device.fingerprint,
     deviceName: device.name,
     replaced: previous !== undefined,
+    configBefore: config,
+    configAfter,
     ...(revokedFingerprint ? { revokedFingerprint } : {}),
   }
 }
 
-const USAGE = `bureau install-mcp — pair a local MCP host with this Bureau
+const BEARER_RE = /^Bearer (apd1\.[0-9a-f]+\.\S+)$/i
+
+/** A copy of the config with every device bearer replaced by a short placeholder, safe to print. */
+export function redactBearers(value: unknown): unknown {
+  if (typeof value === "string") {
+    const m = BEARER_RE.exec(value)
+    return m ? `Bearer <device bearer ${(/^apd1\.([0-9a-f]+)\./i.exec(m[1] ?? "")?.[1] ?? "").slice(0, 8)}, redacted>` : value
+  }
+  if (Array.isArray(value)) return value.map(redactBearers)
+  if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactBearers(v)]))
+  return value
+}
+
+/** A unified-style line diff of two configs (bearers redacted), 2 lines of context. Empty string when equal. */
+export function renderConfigDiff(path: string, before: Json, after: Json): string {
+  const a = JSON.stringify(redactBearers(before), null, 2).split("\n")
+  const b = JSON.stringify(redactBearers(after), null, 2).split("\n")
+  const lcs: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      lcs[i]![j] = a[i] === b[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!)
+  const ops: Array<{ tag: " " | "-" | "+"; line: string }> = []
+  let i = 0
+  let j = 0
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) ops.push({ tag: " ", line: a[i++]! }), j++
+    else if (j < b.length && (i === a.length || lcs[i]![j + 1]! > lcs[i + 1]![j]!)) ops.push({ tag: "+", line: b[j++]! })
+    else ops.push({ tag: "-", line: a[i++]! })
+  }
+  if (!ops.some(o => o.tag !== " ")) return ""
+  const near = ops.map((_, k) => ops.slice(Math.max(0, k - 2), k + 3).some(o => o.tag !== " "))
+  const lines = [`--- ${path}`, `+++ ${path}`]
+  let gap = false
+  ops.forEach((o, k) => {
+    if (!near[k]) gap = true
+    else {
+      if (gap) lines.push("@@")
+      gap = false
+      lines.push(`${o.tag} ${o.line}`)
+    }
+  })
+  return lines.join("\n")
+}
+
+/** True when the entry already in the host config is this URL with a bearer that still verifies. */
+async function entryIsLive(
+  configPath: string,
+  serverName: string,
+  url: string,
+  registry: PairingHostRegistry
+): Promise<string | undefined> {
+  const config = await readConfig(configPath)
+  const entry = isObject(config.mcpServers) ? config.mcpServers[serverName] : undefined
+  if (!isObject(entry) || entry.url !== url || !isObject(entry.headers)) return undefined
+  const auth = entry.headers.Authorization
+  if (typeof auth !== "string" || !auth.startsWith("Bearer ")) return undefined
+  const device = await registry.verifyDeviceBearer(auth.slice("Bearer ".length))
+  return device?.fingerprint
+}
+
+const USAGE = `bureau install-mcp: pair a local MCP host with this Bureau
 
   bureau install-mcp [--client claude|cursor] [--config <path>] [--url <mcp-url>]
                      [--name <server-key>] [--device <device-name>]
@@ -131,8 +199,11 @@ const USAGE = `bureau install-mcp — pair a local MCP host with this Bureau
   --url      Bureau /mcp URL (default http://127.0.0.1:<PORT or 8830>/mcp)
   --name     key under mcpServers (default "bureau")
   --device   label in \`bureau devices list\` (default mcp-<client>)
+  --rotate   mint a fresh device even when the entry already holds a valid one
 
-Safe to re-run: it replaces its own entry and revokes the device it held before.`
+Safe to re-run: when the entry already holds a valid device for this URL, nothing
+changes. Otherwise it replaces its own entry, revokes the device it held before and
+prints the config diff with the bearer redacted.`
 
 export async function runInstallMcp(argv: string[]): Promise<number> {
   const { flags } = parseArgs(argv)
@@ -146,18 +217,31 @@ export async function runInstallMcp(argv: string[]): Promise<number> {
     return 2
   }
   const port = Number(process.env.PORT ?? process.env.BUREAU_PORT ?? 8830)
+  const url = flags.url ?? `http://127.0.0.1:${port}/mcp`
+  const registry = createOfflineRegistry(bureauHome())
+  const configPath = flags.config ?? defaultConfigPath(client)
+  const serverName = flags.name ?? "bureau"
+  if (!flags.rotate) {
+    const live = await entryIsLive(configPath, serverName, url, registry)
+    if (live) {
+      out(`"${serverName}" in ${configPath} already holds a valid device (${live.slice(0, 8)}); nothing changed.`)
+      return 0
+    }
+  }
   const result = await installMcp({
     client,
-    ...(flags.config ? { configPath: flags.config } : {}),
-    ...(flags.name ? { serverName: flags.name } : {}),
+    configPath,
+    serverName,
     ...(flags.device ? { deviceName: flags.device } : {}),
-    url: flags.url ?? `http://127.0.0.1:${port}/mcp`,
-    registry: createOfflineRegistry(bureauHome()),
+    url,
+    registry,
   })
   out(
     `${result.replaced ? "Updated" : "Added"} "${flags.name ?? "bureau"}" in ${result.configPath} ` +
       `(device ${result.deviceName}, ${result.fingerprint.slice(0, 8)}).`
   )
+  const diff = renderConfigDiff(result.configPath, result.configBefore, result.configAfter)
+  if (diff) out(diff)
   if (result.revokedFingerprint)
     out(`Revoked the previous device ${result.revokedFingerprint.slice(0, 8)}.`)
   out("Restart the host so it picks up the new entry.")

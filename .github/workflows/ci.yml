@@ -1,0 +1,74 @@
+# Not run anywhere yet. Note: until the @agentproto/* packages this repo depends
+# on are published, `pnpm install` cannot resolve them on a clean runner (local
+# development links them through an uncommitted override). See LAUNCH-CHECKLIST.md.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  release-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan a clean export of HEAD (twice, reports must match)
+        run: |
+          set -euo pipefail
+          export_dir="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$export_dir"
+          export/scan.sh "$export_dir" "$RUNNER_TEMP/scan-1.txt"
+          export/scan.sh "$export_dir" "$RUNNER_TEMP/scan-2.txt"
+          cmp "$RUNNER_TEMP/scan-1.txt" "$RUNNER_TEMP/scan-2.txt"
+      - name: No private product names or scopes in the tree
+        run: |
+          set -euo pipefail
+          # The names are split so that this file does not match its own check.
+          pattern="@(ag""studio|gui""lde|sim""one|canva""kit)"
+          if git grep -nE "$pattern" -- . ':!export/'; then
+            echo "private package scope found (locations above)" >&2
+            exit 1
+          fi
+      - name: No em dashes in user-facing docs
+        run: |
+          set -euo pipefail
+          if git grep -nE $'\xe2\x80\x94' -- README.md SECURITY.md CONTRIBUTING.md docs .github .changeset; then
+            echo "em dash found (locations above)" >&2
+            exit 1
+          fi
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (whole history)
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
+            detect --source /repo --config /repo/.gitleaks.toml --redact --no-banner

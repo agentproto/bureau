@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git"
+    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "directory": "apps/bureau"
   },
   "description": "Bureau: an installable browser capability server. Drives a real (stealth) browser and exposes its capabilities as MCP tools over HTTP.",
   "main": "./dist/index.js",
@@ -43,8 +44,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "publishConfig": {
     "access": "public"
@@ -80,5 +80,10 @@
   },
   "optionalDependencies": {
     "qrcode-terminal": "^0.12.0"
+  },
+  "author": "Agentik",
+  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "bugs": {
+    "url": "https://github.com/bureau-sh/bureau/issues"
   }
 }

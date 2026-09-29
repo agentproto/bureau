@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git"
+    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "directory": "packages/mcp"
   },
   "description": "Unified browser MCP catalogue for Bureau: control, scrape, screencast and inspect tools",
   "main": "./dist/index.js",
@@ -31,5 +32,13 @@
     "@agentproto/bureau-purify": "workspace:*",
     "@agentproto/bureau-router": "workspace:*",
     "zod": "^4.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Agentik",
+  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "bugs": {
+    "url": "https://github.com/bureau-sh/bureau/issues"
   }
 }

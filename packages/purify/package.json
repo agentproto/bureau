@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git"
+    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "directory": "packages/purify"
   },
   "description": "Pure HTML to clean-markdown purifier (Defuddle)",
   "main": "./dist/index.js",
@@ -27,5 +28,13 @@
   },
   "dependencies": {
     "defuddle": "^0.14.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Agentik",
+  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "bugs": {
+    "url": "https://github.com/bureau-sh/bureau/issues"
   }
 }

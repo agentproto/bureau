@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git"
+    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "directory": "packages/drivers"
   },
   "description": "Concrete BrowserDriver backends for Bureau: camofox (stealth Firefox) and an external MCP browser server",
   "main": "./dist/index.js",
@@ -38,5 +39,13 @@
   "dependencies": {
     "@agentproto/bureau-core": "workspace:*",
     "zod": "^4.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Agentik",
+  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "bugs": {
+    "url": "https://github.com/bureau-sh/bureau/issues"
   }
 }

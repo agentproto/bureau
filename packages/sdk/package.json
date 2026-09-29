@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bureau-sh/bureau.git"
+    "url": "git+https://github.com/bureau-sh/bureau.git",
+    "directory": "packages/sdk"
   },
   "description": "Typed client for a Bureau capability server: sessions, tabs and live snapshots over an injected transport",
   "sideEffects": false,
@@ -24,8 +25,7 @@
     }
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "keywords": [
     "bureau",
@@ -52,5 +52,13 @@
     "react": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Agentik",
+  "homepage": "https://github.com/bureau-sh/bureau#readme",
+  "bugs": {
+    "url": "https://github.com/bureau-sh/bureau/issues"
   }
 }

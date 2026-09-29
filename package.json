@@ -12,9 +12,12 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "scan": "export/scan.sh . export/scan-report.txt"
+    "scan": "export/scan.sh . export/scan-report.txt",
+    "changeset": "changeset",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.0",
     "@types/node": "^25.6.2",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",

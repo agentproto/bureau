@@ -1,0 +1,33 @@
+Bureau quickstart run
+result: PASS   total: 6536 ms   node: v22.22.0   platform: darwin
+
+Setup: fresh temp HOME and BUREAU_HOME, random loopback ports, the built server and CLI from apps/bureau/dist.
+Camofox is a FAKE REST server (tabs, navigate, evaluate) run by the script; a real Camofox is not started.
+The fixture page is served over real local HTTP. No real browser profile, Keychain or user MCP config was touched.
+
+stage                                                    ms  status  detail
+bureau start (server + fake camofox reused)             419  ok    /health: browser=camofox state=healthy tools=19 wasAlreadyRunning=true
+/mcp without a bearer is refused                          3  ok    401
+bureau install-mcp (first run)                          247  ok    exit 0, config diff printed (below)
+bureau install-mcp (second run, idempotent)             232  ok    exit 0, config byte-identical, no diff
+MCP initialize                                            9  ok    server bureau
+tools/list                                                2  ok    19 tools, includes browser_navigate
+browser_navigate to the fixture page                    527  ok    result: "{\n  \"url\": \"http://127.0.0.1:57383/\"\n}"
+browser_evaluate reads the page title                    13  ok    title "Bureau quickstart fixture" read back
+examples/navigate.mjs (SDK) reads the title            1294  ok    exit 0, printed the title "Bureau quickstart fixture"
+bureau doctor (informational)                          3281  ok    exit 1: provider:camofox:=ok camofox:=FAIL chrome-local-state:=FAIL chrome-cookies:=FAIL keychain:=skip pairing-store:=ok consent-ledger:=skip authorize:=ok (informational: the temp HOME has no Chrome profile, so chrome checks fail here)
+
+Config diff printed by the first `bureau install-mcp` (bearer redacted by the command):
+  --- <tmp>/mcp.json
+  +++ <tmp>/mcp.json
+  - {}
+  + {
+  +   "mcpServers": {
+  +     "bureau": {
+  +       "url": "http://127.0.0.1:57385/mcp",
+  +       "headers": {
+  +         "Authorization": "Bearer <device bearer ab195571, redacted>"
+  +       }
+  +     }
+  +   }
+  + }
