@@ -24,6 +24,8 @@ export const browserDriverKindSchema = z.enum([
   "headless", // server-side Playwright/CDP
   "chromium-service", // remote heavy Chromium webservice (apps/service)
   "camofox", // stealth Firefox
+  "chrome", // system Chrome over CDP (kit adapter)
+  "chromium", // Playwright Chromium (kit adapter)
   "stagehand", // Stagehand AI automation (cloud)
   "browserbase", // Browserbase cloud
   "mcp", // adapter onto an external MCP browser server (e.g. chrome-devtools-mcp)

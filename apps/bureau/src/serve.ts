@@ -27,6 +27,8 @@
 
 import { createBrowserMcpCatalogue } from "@agentproto/bureau-mcp"
 import type { BrowserCapabilityName, BrowserProvider, BrowserRegistry } from "@agentproto/driver-browser"
+import type { BrowserDriverKind } from "@agentproto/bureau-core/driver"
+import type { BrowserLaunchOptions as BrowserDriverLaunchOptions } from "@agentproto/driver-browser"
 import type { AddressInfo } from "node:net"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { asContent, toInputSchema, type McpEntry } from "./mcp-tool.js"
@@ -79,6 +81,7 @@ import {
   createBureauBrowserRegistry,
   createCamofoxClient,
   createControlDriverRegistry,
+  createKitControlProvider,
   requireBrowser,
   type BureauCamofoxClient,
 } from "./lib/browser-registry.js"
@@ -147,6 +150,8 @@ export interface CatalogueOptions {
   browser?: BrowserProvider
   /** Told when a live session opens and closes (browser-minute metering). */
   sessionUsage?: BrowserUsageTracker
+  /** Kit launch options (headless, profile...) for the control-driver attach. */
+  launchOptions?: BrowserDriverLaunchOptions
 }
 
 /** Build the full tool catalogue — every entry `runServe` registers, minus
@@ -163,10 +168,27 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
   registerSampleRecipes(recipeRegistry)
 
   // ── Driver registry ────────────────────────────────────────────────────────
+  const log = (s: string): void => {
+    // eslint-disable-next-line no-console
+    console.log(s)
+  }
   const browsers = opts.browsers ?? createBureauBrowserRegistry({ plugins })
   const browser = opts.browser ?? requireBrowser(browsers, DEFAULT_BROWSER_ID)
   const camofox = createCamofoxClient(CONTROL_USER_ID)
   const registry = createControlDriverRegistry(camofox)
+  // A CDP-capable kit browser (chrome, chromium) is driven directly: the
+  // control tools attach to the supervised instance and answer CDP questions
+  // with real data, not a camofox error string. Camofox stays the default kind.
+  let controlDefaultKind: BrowserDriverKind = "camofox"
+  const kitControl = createKitControlProvider({
+    provider: browser,
+    launchOptions: opts.launchOptions,
+    log,
+  })
+  if (kitControl) {
+    registry.register(kitControl)
+    controlDefaultKind = browser.id === "chromium" ? "chromium" : "chrome"
+  }
 
   // ── Control catalogue ──────────────────────────────────────────────────────
   // Raw BrowserMcpToolDescriptor[] from the vendor-neutral catalogue; also kept
@@ -174,7 +196,7 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
   // content blocks.
   const controlCatalogue = createBrowserMcpCatalogue({
     registry,
-    defaultKind: "camofox",
+    defaultKind: controlDefaultKind,
   })
   const controlEntries: McpEntry[] = controlCatalogue.map(t => ({
     name: t.name,
@@ -198,10 +220,6 @@ export function buildCatalogue(opts: CatalogueOptions = {}): BureauCatalogue {
   // chains share the same live tab as browser_act. `log` surfaces the pool's
   // self-heal lines (backend restart / launch-coincident retry —
   // lib/backend-health.ts) on stdout, same channel as the boot line below.
-  const log = (s: string): void => {
-    // eslint-disable-next-line no-console
-    console.log(s)
-  }
   const base = sessionResolver(sessionDeps)
   const { resolvePooledDriver, pooledResolver, pool } = createActiveDriverPool(
     base,
@@ -453,7 +471,7 @@ export async function runServe(
       ? noopUsageTracker
       : createBrowserUsageTracker({ meter, browser: plan.provider.id, heartbeatMs, ...(deps.usageClock ? { clock: deps.usageClock } : {}) })
 
-  const catalogue = buildCatalogue({ plugins, browsers: registry, browser: plan.provider, usage: meter, sessionUsage: usageTracker })
+  const catalogue = buildCatalogue({ plugins, browsers: registry, browser: plan.provider, usage: meter, sessionUsage: usageTracker, launchOptions: plan.options })
   const { extraRoutes, store, camofox } = catalogue
 
   const host = resolveHost(argv)

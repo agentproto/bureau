@@ -8,7 +8,10 @@
  * `no-provider-imports.test.ts` fails when any other file imports an adapter.
  */
 
-import { createBrowserRegistry, type BrowserProvider, type BrowserRegistry } from "@agentproto/driver-browser"
+import { createBrowserRegistry, type BrowserProvider, type BrowserRegistry, hasCapability } from "@agentproto/driver-browser"
+import type { BrowserLaunchOptions, BrowserHostContext, BrowserDriver as KitBrowserDriver } from "@agentproto/driver-browser"
+import type { BrowserDriverProvider as BureauDriverProvider } from "@agentproto/bureau-core/driver"
+import { createKitControlDriverProvider, kitControlCapabilities, isKitControlBrowser } from "./kit-control-driver.js"
 import { camofox, mapCamofoxHealth, createCamofoxRestClient, resolveCamofoxLaunchCommand } from "@agentproto/adapter-browser-camofox"
 import { chrome, resolveChrome, CHROME_ENV_VAR } from "@agentproto/adapter-browser-chrome"
 import { chromium } from "@agentproto/adapter-browser-chromium"
@@ -79,6 +82,55 @@ export function createControlDriverRegistry(client: BureauCamofoxClient): Browse
   const registry = createBrowserDriverRegistry()
   registerCamofoxDriver(registry, { client })
   return registry
+}
+
+export interface KitControlLaunchOptions {
+  /** The supervised kit provider (already refusals-checked via planBrowserLaunch). */
+  provider: BrowserProvider
+  /** Kit launch options (headless, profile, port...). Default: provider defaults. */
+  launchOptions?: BrowserLaunchOptions
+  /** Launch log channel (the bureau `[browser]` logger). */
+  log?: (line: string) => void
+}
+
+/** True when the active browser is a kit provider that can drive the control tools in-process
+ *  (a CDP browser whose manifest declares `cdp`, other than camofox which keeps its REST driver). */
+export function supportsKitControlDriver(provider: BrowserProvider): boolean {
+  return isKitControlBrowser(provider.id) && hasCapability(provider.capabilities, "cdp")
+}
+
+/**
+ * Control-driver over a supervised kit provider. `launch` is idempotent per
+ * profile dir, so the first tool attach after the supervisor's launch reuses
+ * the same browser (driver shim in apps/bureau/src/lib/kit-control-driver.ts).
+ */
+export function createKitControlProvider(opts: KitControlLaunchOptions): BureauDriverProvider | undefined {
+  const { provider, log } = opts
+  if (!supportsKitControlDriver(provider)) return undefined
+  const launchOptions: BrowserLaunchOptions = opts.launchOptions ?? {}
+  const ctx: BrowserHostContext = {
+    log: (line: string) => log?.(line),
+  }
+  const attach = (): Promise<KitBrowserDriver> => provider.launch(launchOptions, ctx).then(instance => instance.attach())
+  return createKitControlDriverProvider({
+    kind: provider.id === "chromium" ? "chromium" : "chrome",
+    capabilities: kitControlCapabilities(
+      {
+        canCaptureResponseBodies: hasCapability(provider.capabilities, "canCaptureResponseBodies"),
+        canDispatchTrustedInput: hasCapability(provider.capabilities, "canDispatchTrustedInput"),
+        canThrottleNetwork: hasCapability(provider.capabilities, "canThrottleNetwork"),
+        isUserVisible: hasCapability(provider.capabilities, "isUserVisible"),
+        canScreencast: hasCapability(provider.capabilities, "canScreencast"),
+        canRecordVideo: hasCapability(provider.capabilities, "canRecordVideo"),
+        canStealth: hasCapability(provider.capabilities, "canStealth"),
+        canFullPageScreenshot: hasCapability(provider.capabilities, "canFullPageScreenshot"),
+        canAiActions: hasCapability(provider.capabilities, "canAiActions"),
+        canCookies: hasCapability(provider.capabilities, "canCookies"),
+        canMultiTarget: hasCapability(provider.capabilities, "canMultiTarget"),
+      }
+    ),
+    attach,
+  })
 }
 
 export interface BackendHealthSample {
