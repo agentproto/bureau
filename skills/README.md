@@ -20,6 +20,8 @@ infrastructure. They plug in through the plugin seam and live outside this repo.
 
 ## Rule for anything added here
 
-A skill in this folder must pass `pnpm scan` and must work with only what this
-repository and the public packages provide. If it needs a private component, it
-belongs to the private pack.
+A skill in this folder must not name a private product, internal package
+scope, personal name or email, absolute machine path, private hostname, or
+credential (CI checks this and fails closed), and must work with only what
+this repository and the public packages provide. If it needs a private
+component, it belongs to the private pack.

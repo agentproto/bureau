@@ -21,7 +21,6 @@ uncommitted `.pnpmfile.cjs` override; never commit that file or the lockfile.
 ```bash
 pnpm typecheck                # tsc --noEmit in every package
 pnpm test                     # vitest, offline (fakes only, no live browser)
-pnpm scan                     # release scan: paths, secrets, private names
 node scripts/quickstart-check.mjs   # the README quickstart on a temp HOME with a fake Camofox
 ```
 
@@ -47,8 +46,8 @@ Use the existing fakes. Bug fixes come with a test that fails without the fix.
 
 This repository must not contain names of private products, internal package
 scopes, personal names or emails, absolute machine paths, hostnames of
-private infrastructure, or credentials. `pnpm scan` and CI check this and fail
-closed. If a legitimate string trips the scan, change the string, not the scan.
+private infrastructure, or credentials. CI checks this and fails closed. If a
+legitimate string trips a check, change the string, not the check.
 
 ## Security issues
 

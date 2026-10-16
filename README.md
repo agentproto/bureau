@@ -138,7 +138,6 @@ pnpm install
 pnpm build        # tsup in every package, dependency order
 pnpm typecheck    # tsc --noEmit everywhere
 pnpm test         # vitest, offline (fakes only)
-pnpm scan         # release scan: paths, secrets, private names
 ```
 
 Tests never touch a live browser. See [CONTRIBUTING.md](CONTRIBUTING.md).
