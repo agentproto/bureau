@@ -27,10 +27,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@agentproto/bureau-core": "workspace:*",
-    "@agentproto/bureau-drivers": "workspace:*",
-    "@agentproto/bureau-purify": "workspace:*",
-    "@agentproto/bureau-router": "workspace:*",
+    "@agentproto/bureau-core": "^0.1.0",
+    "@agentproto/bureau-drivers": "^0.1.0",
+    "@agentproto/bureau-purify": "^0.1.0",
+    "@agentproto/bureau-router": "^0.1.0",
     "zod": "^4.4.3"
   },
   "publishConfig": {

@@ -52,6 +52,22 @@ jobs:
             echo "em dash found (locations above)" >&2
             exit 1
           fi
+      - name: "No workspace: protocol in a published package.json"
+        run: |
+          set -euo pipefail
+          # workspace:* only resolves inside this pnpm workspace. A published
+          # tarball that still has it is uninstallable with plain npm/pnpm
+          # (this bit @agentproto/bureau, bureau-mcp and bureau-drivers 0.1.0).
+          fail=0
+          for f in apps/*/package.json packages/*/package.json; do
+            private="$(jq -r '.private // false' "$f")"
+            [ "$private" = "true" ] && continue
+            if grep -q '"workspace:' "$f"; then
+              echo "$f: workspace: dependency would break a plain install of the published package" >&2
+              fail=1
+            fi
+          done
+          exit "$fail"
 
   secrets:
     runs-on: ubuntu-latest
