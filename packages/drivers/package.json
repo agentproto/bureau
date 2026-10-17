@@ -1,6 +1,6 @@
 {
   "name": "@agentproto/bureau-drivers",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -37,7 +37,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@agentproto/bureau-core": "^0.1.0",
+    "@agentproto/bureau-core": "^0.1.1",
     "zod": "^4.4.3"
   },
   "publishConfig": {
