@@ -1,14 +1,12 @@
-# gitleaks configuration. Default rules stay on; only the release-scan pattern
-# list (which contains token-shaped literals by design) and test fixtures are
-# allowlisted.
+# gitleaks configuration. Default rules stay on; only test fixtures (which
+# contain token-shaped literals by design) are allowlisted.
 title = "bureau gitleaks"
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "scan pattern definitions and test fixtures"
+description = "test fixtures"
 paths = [
-  '''^export/scan-patterns\.txt$''',
   '''\.test\.ts$''',
 ]

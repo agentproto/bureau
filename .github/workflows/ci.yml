@@ -36,20 +36,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Scan a clean export of HEAD (twice, reports must match)
-        run: |
-          set -euo pipefail
-          export_dir="$(mktemp -d)"
-          git archive HEAD | tar -x -C "$export_dir"
-          export/scan.sh "$export_dir" "$RUNNER_TEMP/scan-1.txt"
-          export/scan.sh "$export_dir" "$RUNNER_TEMP/scan-2.txt"
-          cmp "$RUNNER_TEMP/scan-1.txt" "$RUNNER_TEMP/scan-2.txt"
       - name: No private product names or scopes in the tree
         run: |
           set -euo pipefail
           # The names are split so that this file does not match its own check.
           pattern="@(ag""studio|gui""lde|sim""one|canva""kit)"
-          if git grep -nE "$pattern" -- . ':!export/'; then
+          if git grep -nE "$pattern" -- .; then
             echo "private package scope found (locations above)" >&2
             exit 1
           fi
@@ -60,6 +52,22 @@ jobs:
             echo "em dash found (locations above)" >&2
             exit 1
           fi
+      - name: "No workspace: protocol in a published package.json"
+        run: |
+          set -euo pipefail
+          # workspace:* only resolves inside this pnpm workspace. A published
+          # tarball that still has it is uninstallable with plain npm/pnpm
+          # (this bit @agentproto/bureau, bureau-mcp and bureau-drivers 0.1.0).
+          fail=0
+          for f in apps/*/package.json packages/*/package.json; do
+            private="$(jq -r '.private // false' "$f")"
+            [ "$private" = "true" ] && continue
+            if grep -q '"workspace:' "$f"; then
+              echo "$f: workspace: dependency would break a plain install of the published package" >&2
+              fail=1
+            fi
+          done
+          exit "$fail"
 
   secrets:
     runs-on: ubuntu-latest

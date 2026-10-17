@@ -37,7 +37,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@agentproto/bureau-core": "workspace:*",
+    "@agentproto/bureau-core": "^0.1.0",
     "zod": "^4.4.3"
   },
   "publishConfig": {
