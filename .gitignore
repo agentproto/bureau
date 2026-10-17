@@ -17,3 +17,5 @@ sessions/
 !/export/scan-patterns.txt
 !/export/scan-selftest.sh
 LAUNCH-CHECKLIST.md
+.turbo/
+.npmrc
